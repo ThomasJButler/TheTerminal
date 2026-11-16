@@ -12,8 +12,8 @@ import { DemoStage, type DemoVisual } from './DemoStage';
  * have sat down at it: the camera has gone through the glass, the case is gone, and the
  * rain is a dim backdrop behind the DOM terminal.
  *
- * Kept deliberately small: no model files, no lights, and no post-processing outside the
- * demo (see buildStage). The case is a
+ * Kept deliberately small: no model files, no lights, and one post-processing pass that
+ * the backdrop never uses (see buildGlow). The case is a
  * handful of extruded shapes drawn as edge lines, and the rain is one instanced draw call
  * whose motion lives entirely in the vertex shader, so a frame costs no per-glyph
  * JavaScript at all.
@@ -81,6 +81,7 @@ const RAIN_FRAG = /* glsl */ `
   uniform sampler2D uAtlas;
   uniform vec3 uColor;
   uniform float uDim;
+  uniform float uLit;
   varying vec2 vUv;
   varying float vBright;
   varying float vHead;
@@ -90,7 +91,11 @@ const RAIN_FRAG = /* glsl */ `
     vec3 color = mix(uColor, vec3(1.0), vHead * 0.75);
     float strength = a * (vBright + vHead * 0.5) * uDim;
     if (strength < 0.01) discard;
-    gl_FragColor = vec4(color * strength, 1.0);
+    vec3 lit = color * strength;
+    // The glow pass ends by converting to the screen's colour space, which this shader has
+    // never done for itself. Undoing it here keeps the rain the brightness it always was,
+    // so nothing jumps when the camera goes through the glass and the glow is switched off.
+    gl_FragColor = vec4(mix(lit, pow(lit, vec3(2.2)), uLit), 1.0);
   }
 `;
 
@@ -149,6 +154,7 @@ export class Scene {
   private lineMaterial: THREE.LineBasicMaterial;
   private glowMaterials: THREE.MeshBasicMaterial[] = [];
   private tubeGlow: THREE.Mesh | null = null;
+  private pool: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null = null;
   private rainMaterial: THREE.ShaderMaterial;
   private screenCanvas = document.createElement('canvas');
   private screenTexture: THREE.CanvasTexture;
@@ -174,6 +180,11 @@ export class Scene {
   private stage: DemoStage | null = null;
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
+  /** How much of the glow the intro has: all of it outside, none by the time you are inside. */
+  private glowFade = 1;
+  /** 0 is everything. A machine that cannot keep up is stepped down to 1, then 2. */
+  private quality = 0;
+  private slow = { frames: 0, time: 0 };
   private demoOn = false;
   private demoVisual: DemoVisual = 'land';
   private beat: () => number | null = () => null;
@@ -205,6 +216,7 @@ export class Scene {
         uAtlas: { value: glyphAtlas() },
         uColor: { value: color.clone() },
         uDim: { value: 0 },
+        uLit: { value: 0 },
       },
       transparent: true,
       blending: THREE.AdditiveBlending,
@@ -215,6 +227,7 @@ export class Scene {
     this.buildRain();
     this.buildMachine();
     this.scene.add(this.machine);
+    this.buildGlow();
 
     this.applyMode();
     this.drawScreen();
@@ -400,6 +413,7 @@ export class Scene {
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(0, 0.005, 2.4);
     m.add(pool);
+    this.pool = pool;
     this.disposables.push(this.glowTexture);
   }
 
@@ -458,8 +472,6 @@ export class Scene {
     const inside = this.mode === 'inside';
     this.machine.visible = this.demoOn ? this.demoVisual === 'machine' : !inside;
     if (this.stage) this.stage.group.visible = this.demoOn;
-    // The painted-on glow over the tube would be blurred a second time by the real one.
-    if (this.tubeGlow) this.tubeGlow.visible = !this.demoOn;
     // The rain belongs to the machine: in the demo it only falls in the shot that shows it.
     this.dimTarget = this.demoOn ? (this.demoVisual === 'machine' ? 0.3 : 0) : inside ? 0.34 : 1;
     if (!this.demoOn) {
@@ -470,26 +482,65 @@ export class Scene {
       this.camera.position.copy(inside ? INSIDE_POS : this.attractPos());
       this.look.copy(inside ? INSIDE_LOOK : ATTRACT_LOOK);
     }
+    if (!this.tween) this.glowFade = 1;
+    // A change of mode compiles shaders, and those few slow frames are not the machine's fault.
+    this.slow = { frames: -40, time: 0 };
+    this.applySize();
+  }
+
+  /** Whether this frame goes through the glow: the intro and the demo, never the backdrop. */
+  private get lit() {
+    return this.demoOn || this.mode === 'attract';
+  }
+
+  private applySize() {
     // Behind the terminal the rain is a dim backdrop, and half the pixels is plenty for it.
-    const ratio = Math.min(window.devicePixelRatio, inside && !this.demoOn ? 1 : 2);
+    const ratio = Math.min(window.devicePixelRatio, this.lit ? [2, 1.25, 1][this.quality] : 1);
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight, false);
     this.composer?.setPixelRatio(ratio);
     this.composer?.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    if (this.bloom) this.bloom.enabled = this.quality < 2;
+    // Drawn straight to the screen, the background is the page's own near-black. Through the
+    // glow that same colour comes out about ten times brighter, as a grey-green wash over
+    // everything (measured, not guessed: 19, 32, 24 where it should be 2, 5, 3). Black is
+    // the one colour that survives any conversion, and three levels of green is no loss.
+    this.renderer.setClearColor(this.lit ? 0x000000 : 0x020503, 1);
+    // The painted-on glow over the tube is only wanted when the real one is off: with both,
+    // the screen is blurred twice and cannot be read.
+    if (this.tubeGlow) this.tubeGlow.visible = !this.demoOn && this.quality === 2;
+    // The light on the desk is a faint layer, and faint layers come out far brighter when
+    // they are added up before the conversion to the screen's colours than after it. Left
+    // alone it turns the dark round the machine into fog.
+    if (this.pool) this.pool.material.opacity = this.lit ? 0.03 : 0.16;
+  }
+
+  /**
+   * Thirty frames a second is fine, and some browsers hold a page to exactly that to save
+   * the battery. Under twenty-five, sustained, means the machine is struggling: give up
+   * resolution first, then the glow. It never steps back up, so it cannot flicker between two.
+   */
+  private watch(dt: number) {
+    if (this.slow.frames++ < 0) return;
+    this.slow.time += dt;
+    if (this.slow.frames < 90) return;
+    const average = this.slow.time / this.slow.frames;
+    this.slow = { frames: 0, time: 0 };
+    if (average > 0.04 && this.quality < 2) {
+      this.quality += 1;
+      this.applySize();
+    }
   }
 
   /* ─── The demo ─── */
 
   /**
-   * The stage and the glow are built the first time the demo is asked for. The glow is the
-   * one place the scene is drawn twice: once to a buffer, then blurred back over itself, so
-   * a line looks lit and not just drawn. It is only ever switched on for the demo. The
-   * machine and the rain behind the terminal are still drawn straight to the screen.
+   * The glow is the one place the scene is drawn twice: once to a buffer, then blurred back
+   * over itself, so a line looks lit and not just drawn. The intro and the demo go through
+   * it. The rain behind the terminal never does: it sits under a page of text, at half the
+   * pixels, and is drawn straight to the screen.
    */
-  private buildStage() {
-    this.stage = new DemoStage(new THREE.Color(PHOSPHOR[this.phosphor]), this.lineMaterial);
-    this.scene.add(this.stage.group);
-
+  private buildGlow() {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     // Four samples a pixel, or thin lines crawl as they move.
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
@@ -498,7 +549,14 @@ export class Scene {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
-    this.disposables.push(this.stage, this.composer, target);
+    this.disposables.push(this.composer, target);
+  }
+
+  /** What the demo flies through. Built the first time the demo is asked for. */
+  private buildStage() {
+    this.stage = new DemoStage(new THREE.Color(PHOSPHOR[this.phosphor]), this.lineMaterial);
+    this.scene.add(this.stage.group);
+    this.disposables.push(this.stage);
   }
 
   /** Give the whole screen to the demo, showing this, or take it back. Built on first use. */
@@ -551,6 +609,7 @@ export class Scene {
       const e = easeInOut(t);
       this.camera.position.lerpVectors(fromPos, toPos, e);
       this.look.lerpVectors(fromLook, toLook, Math.min(1, e * 1.25));
+      this.glowFade = 1 - e;
       if (t > 0.72 && !fired) {
         fired = true;
         onGlass();
@@ -574,6 +633,7 @@ export class Scene {
       const e = easeInOut(t);
       this.camera.position.lerpVectors(fromPos, toPos, e);
       this.look.lerpVectors(fromLook, ATTRACT_LOOK, e);
+      this.glowFade = e;
     });
   }
 
@@ -653,7 +713,23 @@ export class Scene {
       // With the score playing, the glow breathes with the kick. In silence it holds still:
       // a picture pulsing to a beat nobody can hear just looks like a fault.
       if (this.bloom) this.bloom.strength = 0.5 + (beat === null ? 0 : this.stage.kick * 0.14) + this.stage.flash * 0.5;
+    } else if (this.bloom) {
+      this.bloom.strength = 0.3 * this.glowFade;
     }
+    if (this.bloom) {
+      // The intro is a machine in the dark, and the dark has to stay dark: a tighter glow
+      // with a higher bar, so only the lines and the glyphs carry it. The demo is all light
+      // and can afford a wide one.
+      this.bloom.radius = this.demoOn ? 0.55 : 0.3;
+      this.bloom.threshold = this.demoOn ? 0.1 : 0.3;
+      // The glow is five blurs of growing width added together. The widest two are what
+      // lay a wash over the whole frame, so the intro goes without them.
+      const [, , third, fourth, fifth] = this.bloom.bloomTintColors;
+      third.setScalar(this.demoOn ? 1 : 0.45);
+      fourth.setScalar(this.demoOn ? 1 : 0);
+      fifth.setScalar(this.demoOn ? 1 : 0);
+    }
+    uniforms.uLit.value = this.lit && !this.demoOn ? 1 : 0;
 
     // A little parallax from the pointer, eased so it never jumps.
     this.drift.lerp(this.pointer, Math.min(1, dt * 2));
@@ -664,8 +740,12 @@ export class Scene {
       this.look.z,
     );
 
-    if (this.demoOn && this.composer) this.composer.render(dt);
-    else this.renderer.render(this.scene, this.camera);
+    if (this.lit && this.composer) {
+      this.composer.render(dt);
+      this.watch(dt);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   };
 
   dispose() {
