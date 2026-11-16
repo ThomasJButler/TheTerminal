@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { DemoStage, type DemoVisual } from './DemoStage';
 
 /**
  * The 3D layer: a terminal sitting in the dark with rain falling behind it.
@@ -7,7 +12,8 @@ import * as THREE from 'three';
  * have sat down at it: the camera has gone through the glass, the case is gone, and the
  * rain is a dim backdrop behind the DOM terminal.
  *
- * Kept deliberately small: no post-processing, no model files, no lights. The case is a
+ * Kept deliberately small: no model files, no lights, and no post-processing outside the
+ * demo (see buildStage). The case is a
  * handful of extruded shapes drawn as edge lines, and the rain is one instanced draw call
  * whose motion lives entirely in the vertex shader, so a frame costs no per-glyph
  * JavaScript at all.
@@ -15,8 +21,7 @@ import * as THREE from 'three';
 
 export type Phosphor = 'green' | 'amber' | 'white';
 
-/** What the demo is showing: open country, the solids, the road with gates, or the machine. */
-export type DemoVisual = 'land' | 'solids' | 'road' | 'machine';
+export type { DemoVisual };
 
 const PHOSPHOR: Record<Phosphor, string> = { green: '#35ff6e', amber: '#ffb000', white: '#dce6f2' };
 
@@ -89,41 +94,6 @@ const RAIN_FRAG = /* glsl */ `
   }
 `;
 
-/**
- * The demo's landscape: a flat grid of lines, lifted into hills in the vertex shader. The
- * grid slides one cell towards the camera and snaps back, while the hills are sampled from
- * where each line would be if it had kept going, so it reads as flying over ground that
- * never ends. The middle is left flat, as a road.
- */
-const TERRAIN_VERT = /* glsl */ `
-  uniform float uTravel;
-  uniform float uCell;
-  varying float vFog;
-
-  float height(vec2 p) {
-    float hills = smoothstep(3.0, 12.0, abs(p.x));
-    return hills * (sin(p.x * 0.31) * 1.3 + sin(p.y * 0.23 + p.x * 0.13) * 1.9 + sin(p.y * 0.61) * 0.6 + 1.2);
-  }
-
-  void main() {
-    float travelled = uTravel;
-    vec3 pos = position;
-    pos.z += mod(travelled, uCell);
-    pos.y = height(vec2(pos.x, pos.z - travelled));
-    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-    vFog = smoothstep(86.0, 10.0, -mv.z);
-    gl_Position = projectionMatrix * mv;
-  }
-`;
-
-const TERRAIN_FRAG = /* glsl */ `
-  uniform vec3 uColor;
-  varying float vFog;
-  void main() {
-    gl_FragColor = vec4(uColor * vFog * 0.8, 1.0);
-  }
-`;
-
 function glyphAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 512;
@@ -174,10 +144,11 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
 export class Scene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
+  private camera = new THREE.PerspectiveCamera(38, 1, 0.1, 340);
   private machine = new THREE.Group();
   private lineMaterial: THREE.LineBasicMaterial;
   private glowMaterials: THREE.MeshBasicMaterial[] = [];
+  private tubeGlow: THREE.Mesh | null = null;
   private rainMaterial: THREE.ShaderMaterial;
   private screenCanvas = document.createElement('canvas');
   private screenTexture: THREE.CanvasTexture;
@@ -200,17 +171,11 @@ export class Scene {
   private cursorOn = true;
   private disposed = false;
 
-  private demo: THREE.Group | null = null;
+  private stage: DemoStage | null = null;
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
   private demoOn = false;
   private demoVisual: DemoVisual = 'land';
-  private demoTime = 0;
-  private travel = 0;
-  private pace = 7;
-  private gates: THREE.LineLoop[] = [];
-  private sun: THREE.Object3D | null = null;
-  private terrain: THREE.ShaderMaterial | null = null;
-  private stars: THREE.PointsMaterial | null = null;
-  private solids: THREE.Object3D[] = [];
   private beat: () => number | null = () => null;
 
   constructor(private canvas: HTMLCanvasElement, opts: { mode: 'attract' | 'inside'; phosphor: Phosphor }) {
@@ -430,6 +395,7 @@ export class Scene {
     const bloom = this.glow(5.6, 4.4, 0.22);
     bloom.position.set(x, y, z + 0.12);
     m.add(bloom);
+    this.tubeGlow = bloom;
     const pool = this.glow(13, 9, 0.16);
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(0, 0.005, 2.4);
@@ -491,101 +457,56 @@ export class Scene {
   private applyMode() {
     const inside = this.mode === 'inside';
     this.machine.visible = this.demoOn ? this.demoVisual === 'machine' : !inside;
-    if (this.demo) this.demo.visible = this.demoOn;
-    for (const solid of this.solids) solid.visible = this.demoVisual === 'solids';
-    this.dimTarget = this.demoOn ? 0 : inside ? 0.34 : 1;
-    if (this.demoOn) {
-      this.camera.position.set(0, 3.2, 9);
-      this.look.set(0, 4.6, -30);
-    } else {
+    if (this.stage) this.stage.group.visible = this.demoOn;
+    // The painted-on glow over the tube would be blurred a second time by the real one.
+    if (this.tubeGlow) this.tubeGlow.visible = !this.demoOn;
+    // The rain belongs to the machine: in the demo it only falls in the shot that shows it.
+    this.dimTarget = this.demoOn ? (this.demoVisual === 'machine' ? 0.3 : 0) : inside ? 0.34 : 1;
+    if (!this.demoOn) {
+      this.camera.up.set(0, 1, 0);
       this.camera.position.copy(inside ? INSIDE_POS : this.attractPos());
       this.look.copy(inside ? INSIDE_LOOK : ATTRACT_LOOK);
     }
     // Behind the terminal the rain is a dim backdrop, and half the pixels is plenty for it.
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, inside && !this.demoOn ? 1 : 2));
+    const ratio = Math.min(window.devicePixelRatio, inside && !this.demoOn ? 1 : 2);
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight, false);
+    this.composer?.setPixelRatio(ratio);
+    this.composer?.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
   }
 
   /* ─── The demo ─── */
 
-  private buildDemo() {
-    const group = new THREE.Group();
-    const color = new THREE.Color(PHOSPHOR[this.phosphor]);
-    const lines = (points: number[], material: THREE.Material) => {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-      const mesh = new THREE.LineSegments(geometry, material);
-      mesh.frustumCulled = false;
-      this.disposables.push(geometry);
-      return mesh;
-    };
+  /**
+   * The stage and the glow are built the first time the demo is asked for. The glow is the
+   * one place the scene is drawn twice: once to a buffer, then blurred back over itself, so
+   * a line looks lit and not just drawn. It is only ever switched on for the demo. The
+   * machine and the rain behind the terminal are still drawn straight to the screen.
+   */
+  private buildStage() {
+    this.stage = new DemoStage(new THREE.Color(PHOSPHOR[this.phosphor]), this.lineMaterial);
+    this.scene.add(this.stage.group);
 
-    const cell = 2;
-    const half = 44;
-    const near = 6;
-    const far = -84;
-    const grid: number[] = [];
-    for (let z = far; z <= near; z += cell) for (let x = -half; x < half; x += cell) grid.push(x, 0, z, x + cell, 0, z);
-    for (let x = -half; x <= half; x += cell) for (let z = far; z < near; z += cell) grid.push(x, 0, z, x, 0, z + cell);
-    this.terrain = new THREE.ShaderMaterial({
-      vertexShader: TERRAIN_VERT,
-      fragmentShader: TERRAIN_FRAG,
-      uniforms: { uTravel: { value: 0 }, uCell: { value: cell }, uColor: { value: color.clone() } },
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    group.add(lines(grid, this.terrain));
-
-    // The sun: a circle that is only its horizontal chords.
-    const sun: number[] = [];
-    const radius = 13;
-    for (let i = 0; i < 20; i++) {
-      const y = -radius + (i + 0.5) * ((2 * radius) / 20);
-      const reach = Math.sqrt(radius * radius - y * y);
-      sun.push(-reach, 13 + y, -83, reach, 13 + y, -83);
-    }
-    this.sun = lines(sun, this.lineMaterial);
-    group.add(this.sun);
-
-    // Gates over the road: one is sent down it each time the story moves on a year.
-    const frame = [[-7, 0, 0], [-7, 9, 0], [7, 9, 0], [7, 0, 0]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
-    const frameGeometry = new THREE.BufferGeometry().setFromPoints(frame);
-    this.disposables.push(frameGeometry);
-    for (let i = 0; i < 4; i++) {
-      const gate = new THREE.LineLoop(frameGeometry, this.lineMaterial);
-      gate.visible = false;
-      this.gates.push(gate);
-      group.add(gate);
-    }
-
-    const outerEdges = new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.3, 0));
-    const innerEdges = new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.1, 0));
-    this.solids = [new THREE.LineSegments(outerEdges, this.lineMaterial), new THREE.LineSegments(innerEdges, this.lineMaterial)];
-    for (const solid of this.solids) solid.position.set(0, 5.4, -20);
-    group.add(...this.solids);
-
-    const sky: number[] = [];
-    for (let i = 0; i < 260; i++) sky.push((Math.random() - 0.5) * 170, 7 + Math.random() * 46, -42 - Math.random() * 44);
-    const skyGeometry = new THREE.BufferGeometry();
-    skyGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sky, 3));
-    this.stars = new THREE.PointsMaterial({ color, size: 0.24, transparent: true, opacity: 0.8 });
-    group.add(new THREE.Points(skyGeometry, this.stars));
-
-    this.disposables.push(this.terrain, outerEdges, innerEdges, skyGeometry, this.stars);
-    this.demo = group;
-    this.scene.add(group);
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    // Four samples a pixel, or thin lines crawl as they move.
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(this.renderer, target);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.55, 0.1);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+    this.disposables.push(this.stage, this.composer, target);
   }
 
   /** Give the whole screen to the demo, showing this, or take it back. Built on first use. */
   setDemo(visual: DemoVisual | null) {
     const on = visual !== null;
     if (on === this.demoOn && (!on || visual === this.demoVisual)) return;
+    const fresh = on && !this.demoOn;
     this.demoOn = on;
     if (visual) this.demoVisual = visual;
-    if (on && !this.demo) this.buildDemo();
-    // Gates belong to the road. Off it, one still on its way would hang in the next shot.
-    if (this.demoVisual !== 'road') for (const gate of this.gates) gate.visible = false;
+    if (on && !this.stage) this.buildStage();
+    if (visual) this.stage?.show(visual, fresh);
     this.tween = null;
     this.applyMode();
     this.drawScreen();
@@ -593,10 +514,7 @@ export class Scene {
 
   /** Send a gate down the road towards the camera. */
   gate() {
-    const free = this.gates.find((g) => !g.visible);
-    if (!free) return;
-    free.position.z = -78;
-    free.visible = true;
+    this.stage?.gate();
   }
 
   /** Where to read the music's beat from, so the demo can move to it. */
@@ -659,8 +577,7 @@ export class Scene {
     this.lineMaterial.color.copy(color);
     this.rainMaterial.uniforms.uColor.value.copy(color);
     for (const material of this.glowMaterials) material.color.copy(color);
-    this.terrain?.uniforms.uColor.value.copy(color);
-    this.stars?.color.copy(color);
+    this.stage?.setColor(color);
     this.drawScreen();
     this.drawNameplate();
   }
@@ -694,6 +611,7 @@ export class Scene {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
     if (!this.tween && this.mode === 'attract') this.camera.position.copy(this.attractPos());
   };
 
@@ -721,43 +639,7 @@ export class Scene {
       }
     }
 
-    if (this.demoOn && this.terrain) {
-      this.demoTime += dt;
-      const t = this.demoTime;
-      // The road is taken faster than open country. The speed eases, so a cut never jolts.
-      this.pace += ((this.demoVisual === 'road' ? 17 : this.demoVisual === 'machine' ? 4 : 7) - this.pace) * Math.min(1, dt * 2);
-      this.travel += dt * this.pace;
-      this.terrain.uniforms.uTravel.value = this.travel;
-      for (const gate of this.gates) {
-        if (!gate.visible) continue;
-        gate.position.z += dt * this.pace;
-        if (gate.position.z > 12) gate.visible = false;
-      }
-
-      // With the tune playing, the solids kick on the beat. Without it, they keep their own time.
-      const beat = this.beat() ?? t * 2.2;
-      const kick = 0.16 * Math.exp(-5 * (beat % 1));
-      const [outer, inner] = this.solids;
-      outer.rotation.set(t * 0.4, t * 0.6, 0);
-      outer.scale.setScalar(1 + kick);
-      inner.rotation.set(-t * 0.9, t * 0.5, t * 0.3);
-      inner.scale.setScalar(1.15 - kick);
-      outer.position.y = inner.position.y = 5.4 + Math.sin(t * 0.8) * 0.5;
-
-      if (this.demoVisual === 'machine') {
-        // Walk a slow arc in front of the machine. The words sit low on the left, so on a
-        // wide screen the camera looks past it that way and the machine lands top right. A
-        // tall screen has no room beside the words: there it stands further back, above them.
-        const wide = this.camera.aspect > 1;
-        const reach = wide ? 10 : 20;
-        const angle = Math.sin(t * 0.3) * 0.6;
-        this.camera.position.set(Math.sin(angle) * reach - 0.4, 2.7, Math.cos(angle) * reach + 1);
-        this.look.set(wide ? -3.4 : -0.3, wide ? -0.5 : -1.9, 1);
-      } else {
-        this.camera.position.set(Math.sin(t * 0.23) * 3.2, 3.2 + Math.sin(t * 0.31) * 0.5, 9);
-        this.look.set(0, 4.6, -30);
-      }
-    }
+    if (this.demoOn && this.stage) this.stage.update(dt, this.beat(), this.camera, this.look);
 
     // A little parallax from the pointer, eased so it never jumps.
     this.drift.lerp(this.pointer, Math.min(1, dt * 2));
@@ -768,7 +650,8 @@ export class Scene {
       this.look.z,
     );
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.demoOn && this.composer) this.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
   };
 
   dispose() {

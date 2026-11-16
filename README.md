@@ -67,8 +67,8 @@ serves `dist/` the way GitHub Pages does.
 | `src/programs/adventure.ts` | The adventure: rooms, things and a parser, as a pure state machine. |
 | `src/arcade/` | A character-cell screen (`engine.ts`), the two games written on it, and the frame The Matrix Arcade sits in. `games.ts` lists all of it. |
 | `src/demo/` | `reel.ts` is the demo as a list of shots, every line read from the content. `DemoView.tsx` plays it. |
-| `src/scene/Scene.ts` | The three.js layer: the machine, the rain and the demo. Loaded as its own chunk. |
-| `src/machine/` | `useMachine.ts` is all the state. `sound.ts` synthesises every sound. `speech.ts` wraps the browser's speech APIs. |
+| `src/scene/` | The three.js layer, loaded as its own chunk. `Scene.ts` is the machine and the rain. `DemoStage.ts` is what the demo flies through: mountains, a sun, a ringed planet, a city for the road and a core for the projects, in one colour, with a glow pass that only runs for the demo. |
+| `src/machine/` | `useMachine.ts` is all the state. `sound.ts` synthesises every sound, the demo's darksynth score included. `speech.ts` wraps the browser's speech APIs. |
 | `src/terminal/Terminal.tsx`, `Blocks.tsx`, `Overlays.tsx` | What draws it. The overlays are the shadcn dialogs: FIND, MAIL and the plate viewer. |
 | `scripts/prerender.mjs` | Every page to HTML, plus `404.html`, `sitemap.xml` and `robots.txt`. |
 
