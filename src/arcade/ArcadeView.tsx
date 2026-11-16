@@ -5,7 +5,8 @@ import { sound } from '@/machine/sound';
 import type { Machine } from '@/machine/useMachine';
 import { TtyContext, hrefTo } from '@/terminal/Blocks';
 import type { Running } from './engine';
-import { GAMES, type GameInfo } from './games';
+import { projects } from '@/content/projects';
+import { GAMES, ROSTER, type GameInfo } from './games';
 
 const bestKey = (id: string) => `tjb100.best.${id}`;
 
@@ -13,8 +14,10 @@ const ARROWS: Record<string, string> = { ArrowUp: 'up', ArrowDown: 'down', Arrow
 
 /** The list of games. Real text and real links, so it is a page before any script runs. */
 function Cabinet({ m }: { m: Machine }) {
-  const { run } = useContext(TtyContext);
+  const { run, zoom } = useContext(TtyContext);
   const [best, setBest] = useState<Record<string, number>>({});
+  // One screenshot per game, from the project's own file, matched by title.
+  const shots = (projects.find((x) => x.id === 'matrix-arcade')?.games ?? []).map((g) => ({ src: g.src, alt: g.title }));
 
   useEffect(() => {
     setBest(Object.fromEntries(GAMES.map((g) => [g.id, load<number>(bestKey(g.id), 0)])));
@@ -33,8 +36,8 @@ function Cabinet({ m }: { m: Machine }) {
       <main className="app-main" id="main">
         <div className="tty-col tty-out">
           <p><span className="tty-banner">ARCADE</span></p>
-          <h1 className="tty-h1">Two games written for this screen.</h1>
-          <p className="tty-p tty-dim">Nothing but characters in a grid, the way a terminal draws anything. Scores are kept on this device.</p>
+          <h1 className="tty-h1">Fourteen games. Two of them are made of text.</h1>
+          <p className="tty-p tty-dim">TRACE and DECODE were written for this screen: nothing but characters in a grid, the way a terminal draws anything. The other twelve are The Matrix Arcade, wired in.</p>
           <ol className="tty-menu" aria-label="Games">
             {GAMES.map((g, i) => (
               <li key={g.id}>
@@ -56,8 +59,26 @@ function Cabinet({ m }: { m: Machine }) {
               </li>
             ))}
           </ol>
+          <h2 className="tty-h2">In the cabinet</h2>
+          <ol className="tty-roster">
+            {ROSTER.map((game, i) => {
+              const at = shots.findIndex((shot) => shot.alt === game.title);
+              return (
+                <li key={game.title}>
+                  {at >= 0 && (
+                    <button type="button" className="tty-plate" onClick={() => zoom(shots, at)}>
+                      <img src={shots[at].src} alt={`${game.title}, in play`} loading="lazy" decoding="async" width={800} height={500} />
+                    </button>
+                  )}
+                  <span className="tty-roster__title">{String(i + 1).padStart(2, '0')} {game.title}</span>
+                  <span className="tty-roster__kind">{game.kind}</span>
+                  <span className="tty-roster__note">{game.note}</span>
+                </li>
+              );
+            })}
+          </ol>
           <p className="tty-p tty-dim">
-            There are twelve more out in the world, behind one cabinet:{' '}
+            How it was built:{' '}
             <button type="button" className="tty-link" onClick={() => run('cat ~/projects/matrix-arcade.md', { program: 'shell' })}>
               projects/matrix-arcade.md
             </button>
@@ -247,6 +268,56 @@ function Play({ m, game }: { m: Machine; game: GameInfo }) {
   );
 }
 
+/** A game that lives at its own address, shown in a frame with a way back underneath. */
+function Wired({ m, game }: { m: Machine; game: GameInfo & { embed: string } }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [loaded, setLoaded] = useState(false);
+  const back = () => m.navigate('/arcade');
+  const host = new URL(game.embed).host;
+
+  useEffect(() => {
+    // Keys only reach this page until the frame is clicked. After that, the button is the way out.
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && back();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <main className="app-main arcade" id="main">
+        <div className="tty-col arcade__head">
+          <h1 className="tty-banner">{game.title}</h1>
+          <p className="tty-dim">{game.blurb} {game.keys}</p>
+        </div>
+        <div className="arcade__screen">
+          {!loaded && <p className="arcade__loading tty-dim" role="status">Dialling {host}…</p>}
+          <iframe
+            ref={frame}
+            className="arcade__frame"
+            src={game.embed}
+            title="The Matrix Arcade: twelve games"
+            allow="autoplay; fullscreen; gamepad"
+            onLoad={() => setLoaded(true)}
+          />
+        </div>
+      </main>
+      <footer className="tty-foot">
+        <div className="tty-col">
+          <nav className="tty-pf tty-pf--only" aria-label="Cabinet controls">
+            <Button variant="ghost" size="xs" onClick={back}><b>ESC</b>ARCADE</Button>
+            <Button variant="ghost" size="xs" onClick={() => void frame.current?.requestFullscreen?.()}><b>⛶</b>FULL SCREEN</Button>
+            <a className="tty-link arcade__out" data-ext href={game.embed} target="_blank" rel="noopener noreferrer">
+              If the screen stays dark, open it at {host}
+            </a>
+          </nav>
+        </div>
+      </footer>
+    </>
+  );
+}
+
 export function ArcadeView({ m }: { m: Machine }) {
-  return m.game ? <Play key={m.game.id} m={m} game={m.game} /> : <Cabinet m={m} />;
+  const game = m.game;
+  if (!game) return <Cabinet m={m} />;
+  return game.embed ? <Wired m={m} game={{ ...game, embed: game.embed }} /> : <Play key={game.id} m={m} game={game} />;
 }
