@@ -463,6 +463,9 @@ export class Scene {
     // The rain belongs to the machine: in the demo it only falls in the shot that shows it.
     this.dimTarget = this.demoOn ? (this.demoVisual === 'machine' ? 0.3 : 0) : inside ? 0.34 : 1;
     if (!this.demoOn) {
+      // The demo leans the camera and opens its lens. Put both back.
+      this.camera.fov = 38;
+      this.camera.updateProjectionMatrix();
       this.camera.up.set(0, 1, 0);
       this.camera.position.copy(inside ? INSIDE_POS : this.attractPos());
       this.look.copy(inside ? INSIDE_LOOK : ATTRACT_LOOK);
@@ -515,6 +518,11 @@ export class Scene {
   /** Send a gate down the road towards the camera. */
   gate() {
     this.stage?.gate();
+  }
+
+  /** Tell the demo the film has moved on to this shot. */
+  cut(index: number) {
+    this.stage?.cut(index);
   }
 
   /** Where to read the music's beat from, so the demo can move to it. */
@@ -644,7 +652,7 @@ export class Scene {
       this.stage.update(dt, beat, this.camera, this.look);
       // With the score playing, the glow breathes with the kick. In silence it holds still:
       // a picture pulsing to a beat nobody can hear just looks like a fault.
-      if (this.bloom) this.bloom.strength = 0.5 + (beat === null ? 0 : this.stage.kick * 0.14);
+      if (this.bloom) this.bloom.strength = 0.5 + (beat === null ? 0 : this.stage.kick * 0.14) + this.stage.flash * 0.5;
     }
 
     // A little parallax from the pointer, eased so it never jumps.

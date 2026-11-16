@@ -41,6 +41,11 @@ export function DemoView({ m, onVisual }: { m: Machine; onVisual: (visual: Visua
     return () => onVisual(null);
   }, [running, shot.visual, onVisual]);
 
+  // Every change of shot is a cut the scene can feel.
+  useEffect(() => {
+    if (running) sceneRef.current?.cut(at);
+  }, [running, at, sceneRef]);
+
   // Each stop on the road sends a gate down it.
   useEffect(() => {
     if (running && shot.visual === 'road') sceneRef.current?.gate();

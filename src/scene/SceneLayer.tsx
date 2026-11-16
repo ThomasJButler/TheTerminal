@@ -7,6 +7,8 @@ export interface SceneHandle {
   burst: () => void;
   /** Send a gate down the demo's road. */
   gate: () => void;
+  /** Tell the demo which shot the film has cut to. */
+  cut: (index: number) => void;
 }
 
 interface Props {
@@ -69,6 +71,7 @@ export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
     exit: () => sceneRef.current?.exit() ?? Promise.resolve(),
     burst: () => sceneRef.current?.burst(),
     gate: () => sceneRef.current?.gate(),
+    cut: (index) => sceneRef.current?.cut(index),
   }));
 
   return <canvas ref={canvasRef} className="scene" data-ready={ready ? '' : undefined} aria-hidden="true" />;
