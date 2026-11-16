@@ -186,6 +186,41 @@ const WINDOW_VERT = /* glsl */ `
   }
 `;
 
+/**
+ * The aurora: a curtain of upright lines hung along a curve that drifts. Each line is
+ * brightest at its foot and gone by its top, and a shimmer runs along the curtain.
+ */
+const AURORA_VERT = /* glsl */ `
+  attribute vec2 aAlong;  // where along the curtain, and which curtain
+  uniform float uTime;
+  uniform float uAurora;
+  varying float vBright;
+  void main() {
+    float a = aAlong.x;
+    float t = uTime + aAlong.y * 40.0;
+    float base = 33.0 + aAlong.y * 13.0 + sin(a * 9.0 + t * 0.21) * 6.0 + sin(a * 23.0 - t * 0.37) * 2.4 + sin(a * 3.1 + 1.0) * 9.0;
+    float tall = 15.0 + 9.0 * sin(a * 17.0 + t * 0.5);
+    vec3 pos = vec3((a - 0.5) * 380.0, base + position.y * tall, -158.0 - aAlong.y * 6.0 + sin(a * 5.0 + t * 0.1) * 4.0);
+    float shimmer = 0.5 + 0.5 * sin(a * 46.0 + t * 1.6);
+    float ends = smoothstep(0.0, 0.1, a) * smoothstep(1.0, 0.9, a);
+    // It comes and goes in patches along its length, or it reads as a fence.
+    float lit = smoothstep(0.15, 0.7, 0.5 + 0.5 * sin(a * 11.0 + t * 0.13) * sin(a * 4.3 - t * 0.07 + 2.0));
+    float foot = (1.0 - position.y) * (1.0 - position.y);
+    vBright = uAurora * ends * lit * foot * (0.14 + 0.42 * shimmer);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+/** A line whose brightness is given per vertex: a meteor's head is lit and its tail is not. */
+const FADE_VERT = /* glsl */ `
+  attribute float aFade;
+  varying float vBright;
+  void main() {
+    vBright = aFade;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
 const FLAT_FRAG = /* glsl */ `
   uniform vec3 uColor;
   varying float vBright;
@@ -246,13 +281,15 @@ interface Look {
   core: number;
   /** How high the sun stands. It sets behind the core, which needs a dark sky. */
   sun: number;
+  /** How much of the aurora shows. */
+  aurora: number;
 }
 
 const LOOKS: Record<DemoVisual, Look> = {
-  land: { pace: 9, valley: 5, city: 0, core: 0, sun: 13 },
-  solids: { pace: 6, valley: 11, city: 0, core: 1, sun: -13 },
-  road: { pace: 21, valley: 40, city: 1, core: 0, sun: 12 },
-  machine: { pace: 4, valley: 13, city: 0, core: 0, sun: 4 },
+  land: { pace: 9, valley: 5, city: 0, core: 0, sun: 13, aurora: 1 },
+  solids: { pace: 6, valley: 11, city: 0, core: 1, sun: -13, aurora: 0.7 },
+  road: { pace: 21, valley: 40, city: 1, core: 0, sun: 12, aurora: 0.3 },
+  machine: { pace: 4, valley: 13, city: 0, core: 0, sun: 4, aurora: 0 },
 };
 
 function circle(radius: number, segments: number): number[] {
@@ -278,6 +315,14 @@ export class DemoStage {
   };
   private valley = { value: LOOKS.land.valley };
   private cityShow = { value: 0 };
+  private aurora = { value: 1 };
+  private meteors: { at: THREE.Vector3; speed: THREE.Vector3; life: number }[] = [];
+  private meteorLines: THREE.BufferGeometry | null = null;
+  private nextMeteor = 2;
+  private scan: THREE.LineLoop | null = null;
+  private scanMaterial: THREE.LineBasicMaterial | null = null;
+  /** How hard the last beat is still landing, from 1 down to nothing. */
+  kick = 0;
   private dim: THREE.LineBasicMaterial;
   private bright: THREE.LineBasicMaterial;
   private sun: THREE.Object3D | null = null;
@@ -317,6 +362,7 @@ export class DemoStage {
     this.buildCity();
     this.buildGates();
     this.buildCore();
+    this.buildScan();
   }
 
   private keep<T extends { dispose: () => void }>(item: T): T {
@@ -393,6 +439,31 @@ export class DemoStage {
     const stars = new THREE.Points(starGeometry, this.glow(STAR_VERT, DOT_FRAG));
     stars.frustumCulled = false;
     this.group.add(stars);
+
+    const hung: number[] = [];
+    const along: number[] = [];
+    for (let curtain = 0; curtain < 2; curtain++) {
+      // Close enough together that the glow joins them into a sheet.
+      for (let i = 0; i < 1400; i++) {
+        hung.push(0, 0, 0, 0, 1, 0);
+        along.push(i / 1399, curtain, i / 1399, curtain);
+      }
+    }
+    const auroraGeometry = this.keep(new THREE.BufferGeometry());
+    auroraGeometry.setAttribute('position', new THREE.Float32BufferAttribute(hung, 3));
+    auroraGeometry.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 2));
+    const aurora = new THREE.LineSegments(auroraGeometry, this.glow(AURORA_VERT, FLAT_FRAG, { uAurora: this.aurora }));
+    aurora.frustumCulled = false;
+    this.group.add(aurora);
+
+    // Three meteors, reused. Their ends are moved each frame, so the buffer is rewritten.
+    this.meteorLines = this.keep(new THREE.BufferGeometry());
+    this.meteorLines.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(18), 3));
+    this.meteorLines.setAttribute('aFade', new THREE.Float32BufferAttribute(new Float32Array(6), 1));
+    for (let i = 0; i < 3; i++) this.meteors.push({ at: new THREE.Vector3(), speed: new THREE.Vector3(), life: 0 });
+    const meteors = new THREE.LineSegments(this.meteorLines, this.glow(FADE_VERT, FLAT_FRAG));
+    meteors.frustumCulled = false;
+    this.group.add(meteors);
 
     // A ringed planet, as lines of latitude and longitude with a black ball inside it so
     // only the near side shows.
@@ -572,6 +643,45 @@ export class DemoStage {
     this.group.add(this.core);
   }
 
+  /** A frame that climbs the machine and starts again, like something reading it. */
+  private buildScan() {
+    const frame = this.keep(new THREE.BufferGeometry().setFromPoints(
+      [[-3, -2.4], [3, -2.4], [3, 4.5], [-3, 4.5]].map(([x, z]) => new THREE.Vector3(x, 0, z)),
+    ));
+    this.scanMaterial = this.keep(new THREE.LineBasicMaterial({ color: this.shared.uColor.value, transparent: true, opacity: 0 }));
+    this.scan = new THREE.LineLoop(frame, this.scanMaterial);
+    this.scan.visible = false;
+    this.group.add(this.scan);
+  }
+
+  private moveMeteors(dt: number) {
+    if (!this.meteorLines) return;
+    this.nextMeteor -= dt;
+    const idle = this.meteors.find((m) => m.life <= 0);
+    if (idle && this.nextMeteor <= 0) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      idle.at.set(side * (20 + Math.random() * 120), 62 + Math.random() * 40, FAR - 6);
+      idle.speed.set(-side * (45 + Math.random() * 45), -(22 + Math.random() * 18), 0);
+      idle.life = 1;
+      this.nextMeteor = 1.5 + Math.random() * 4.5;
+    }
+    const position = this.meteorLines.getAttribute('position') as THREE.BufferAttribute;
+    const fade = this.meteorLines.getAttribute('aFade') as THREE.BufferAttribute;
+    this.meteors.forEach((meteor, i) => {
+      if (meteor.life > 0) {
+        meteor.life -= dt * 0.8;
+        meteor.at.addScaledVector(meteor.speed, dt);
+      }
+      const lit = Math.max(0, meteor.life);
+      position.setXYZ(i * 2, meteor.at.x, meteor.at.y, meteor.at.z);
+      position.setXYZ(i * 2 + 1, meteor.at.x - meteor.speed.x * 0.16, meteor.at.y - meteor.speed.y * 0.16, meteor.at.z);
+      fade.setX(i * 2, lit * 0.9);
+      fade.setX(i * 2 + 1, 0);
+    });
+    position.needsUpdate = true;
+    fade.needsUpdate = true;
+  }
+
   /** Change what is being shown. The first time, and after the demo has been away, it cuts. */
   show(visual: DemoVisual, fresh: boolean) {
     this.visual = visual;
@@ -592,6 +702,7 @@ export class DemoStage {
     this.shared.uColor.value.copy(color);
     this.dim.color.copy(color);
     this.bright.color.copy(color);
+    this.scanMaterial?.color.copy(color);
   }
 
   /** Move everything on by one frame, and put the camera where this shot wants it. */
@@ -607,6 +718,7 @@ export class DemoStage {
     const kick = Math.exp(-5 * phase);
     this.shared.uTime.value = t;
     this.shared.uKick.value = kick;
+    this.kick = kick;
     this.shared.uPulse.value = phase;
 
     this.pace += (want.pace - this.pace) * ease(1.6);
@@ -616,7 +728,17 @@ export class DemoStage {
     this.city.visible = this.cityShow.value > 0.004;
     this.coreShow += (want.core - this.coreShow) * ease(2.4);
     this.core.visible = this.coreShow > 0.004;
-    if (this.sun) this.sun.position.y += (want.sun - this.sun.position.y) * ease(0.9);
+    if (this.sun) this.sun.position.y += (want.sun - this.sun.position.y) * ease(1.7);
+    this.aurora.value += (want.aurora - this.aurora.value) * ease(0.8);
+    this.moveMeteors(dt);
+
+    if (this.scan && this.scanMaterial) {
+      // One climb every two beats, fading in off the floor and out at the top.
+      const climb = (beats / 2) % 1;
+      this.scan.visible = this.visual === 'machine';
+      this.scan.position.y = 0.05 + climb * 3.1;
+      this.scanMaterial.opacity = Math.sin(climb * Math.PI) * 0.75;
+    }
 
     for (const gate of this.gates) {
       if (!gate.visible) continue;
