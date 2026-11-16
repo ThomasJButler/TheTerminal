@@ -15,6 +15,9 @@ import * as THREE from 'three';
 
 export type Phosphor = 'green' | 'amber' | 'white';
 
+/** What the demo is showing: open country, the solids, the road with gates, or the machine. */
+export type DemoVisual = 'land' | 'solids' | 'road' | 'machine';
+
 const PHOSPHOR: Record<Phosphor, string> = { green: '#35ff6e', amber: '#ffb000', white: '#dce6f2' };
 
 const SCREEN = { x: -0.42, y: 1.42, z: 1.33, w: 2.5, h: 1.875 };
@@ -93,7 +96,7 @@ const RAIN_FRAG = /* glsl */ `
  * never ends. The middle is left flat, as a road.
  */
 const TERRAIN_VERT = /* glsl */ `
-  uniform float uTime;
+  uniform float uTravel;
   uniform float uCell;
   varying float vFog;
 
@@ -103,7 +106,7 @@ const TERRAIN_VERT = /* glsl */ `
   }
 
   void main() {
-    float travelled = uTime * 7.0;
+    float travelled = uTravel;
     vec3 pos = position;
     pos.z += mod(travelled, uCell);
     pos.y = height(vec2(pos.x, pos.z - travelled));
@@ -199,7 +202,12 @@ export class Scene {
 
   private demo: THREE.Group | null = null;
   private demoOn = false;
+  private demoVisual: DemoVisual = 'land';
   private demoTime = 0;
+  private travel = 0;
+  private pace = 7;
+  private gates: THREE.LineLoop[] = [];
+  private sun: THREE.Object3D | null = null;
   private terrain: THREE.ShaderMaterial | null = null;
   private stars: THREE.PointsMaterial | null = null;
   private solids: THREE.Object3D[] = [];
@@ -249,7 +257,7 @@ export class Scene {
     document.fonts?.load('40px VT323').then(() => !this.disposed && this.drawScreen());
     this.cursorTimer = window.setInterval(() => {
       this.cursorOn = !this.cursorOn;
-      if (this.mode === 'attract') this.drawScreen();
+      if (this.mode === 'attract' || this.demoOn) this.drawScreen();
     }, 530);
 
     this.resize();
@@ -454,7 +462,9 @@ export class Scene {
     ctx.shadowBlur = 10;
     ctx.textBaseline = 'top';
     ctx.font = '50px VT323, ui-monospace, monospace';
-    const lines = ['TJB-100', '', 'Wake up...', '', 'Everything is in here.', 'You have to go looking.', '', `SOUND? (Y/N) ${this.cursorOn ? '█' : ''}`];
+    const lines = this.demoOn
+      ? ['TJB-100', '', '2 OPERATOR', '3 ARCADE', '4 ADVENTURE', '6 TERMINAL', '', `PICK ONE ${this.cursorOn ? '█' : ''}`]
+      : ['TJB-100', '', 'Wake up...', '', 'Everything is in here.', 'You have to go looking.', '', `SOUND? (Y/N) ${this.cursorOn ? '█' : ''}`];
     lines.forEach((line, i) => ctx.fillText(line, 44, 40 + i * 50));
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -480,8 +490,9 @@ export class Scene {
 
   private applyMode() {
     const inside = this.mode === 'inside';
-    this.machine.visible = !inside && !this.demoOn;
+    this.machine.visible = this.demoOn ? this.demoVisual === 'machine' : !inside;
     if (this.demo) this.demo.visible = this.demoOn;
+    for (const solid of this.solids) solid.visible = this.demoVisual === 'solids';
     this.dimTarget = this.demoOn ? 0 : inside ? 0.34 : 1;
     if (this.demoOn) {
       this.camera.position.set(0, 3.2, 9);
@@ -519,7 +530,7 @@ export class Scene {
     this.terrain = new THREE.ShaderMaterial({
       vertexShader: TERRAIN_VERT,
       fragmentShader: TERRAIN_FRAG,
-      uniforms: { uTime: { value: 0 }, uCell: { value: cell }, uColor: { value: color.clone() } },
+      uniforms: { uTravel: { value: 0 }, uCell: { value: cell }, uColor: { value: color.clone() } },
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -534,7 +545,19 @@ export class Scene {
       const reach = Math.sqrt(radius * radius - y * y);
       sun.push(-reach, 13 + y, -83, reach, 13 + y, -83);
     }
-    group.add(lines(sun, this.lineMaterial));
+    this.sun = lines(sun, this.lineMaterial);
+    group.add(this.sun);
+
+    // Gates over the road: one is sent down it each time the story moves on a year.
+    const frame = [[-7, 0, 0], [-7, 9, 0], [7, 9, 0], [7, 0, 0]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    const frameGeometry = new THREE.BufferGeometry().setFromPoints(frame);
+    this.disposables.push(frameGeometry);
+    for (let i = 0; i < 4; i++) {
+      const gate = new THREE.LineLoop(frameGeometry, this.lineMaterial);
+      gate.visible = false;
+      this.gates.push(gate);
+      group.add(gate);
+    }
 
     const outerEdges = new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.3, 0));
     const innerEdges = new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.1, 0));
@@ -554,13 +577,26 @@ export class Scene {
     this.scene.add(group);
   }
 
-  /** Give the whole screen to the demo, or take it back. Built the first time it is asked for. */
-  setDemo(on: boolean) {
-    if (on === this.demoOn) return;
+  /** Give the whole screen to the demo, showing this, or take it back. Built on first use. */
+  setDemo(visual: DemoVisual | null) {
+    const on = visual !== null;
+    if (on === this.demoOn && (!on || visual === this.demoVisual)) return;
     this.demoOn = on;
+    if (visual) this.demoVisual = visual;
     if (on && !this.demo) this.buildDemo();
+    // Gates belong to the road. Off it, one still on its way would hang in the next shot.
+    if (this.demoVisual !== 'road') for (const gate of this.gates) gate.visible = false;
     this.tween = null;
     this.applyMode();
+    this.drawScreen();
+  }
+
+  /** Send a gate down the road towards the camera. */
+  gate() {
+    const free = this.gates.find((g) => !g.visible);
+    if (!free) return;
+    free.position.z = -78;
+    free.visible = true;
   }
 
   /** Where to read the music's beat from, so the demo can move to it. */
@@ -688,7 +724,16 @@ export class Scene {
     if (this.demoOn && this.terrain) {
       this.demoTime += dt;
       const t = this.demoTime;
-      this.terrain.uniforms.uTime.value = t;
+      // The road is taken faster than open country. The speed eases, so a cut never jolts.
+      this.pace += ((this.demoVisual === 'road' ? 17 : this.demoVisual === 'machine' ? 4 : 7) - this.pace) * Math.min(1, dt * 2);
+      this.travel += dt * this.pace;
+      this.terrain.uniforms.uTravel.value = this.travel;
+      for (const gate of this.gates) {
+        if (!gate.visible) continue;
+        gate.position.z += dt * this.pace;
+        if (gate.position.z > 12) gate.visible = false;
+      }
+
       // With the tune playing, the solids kick on the beat. Without it, they keep their own time.
       const beat = this.beat() ?? t * 2.2;
       const kick = 0.16 * Math.exp(-5 * (beat % 1));
@@ -698,7 +743,20 @@ export class Scene {
       inner.rotation.set(-t * 0.9, t * 0.5, t * 0.3);
       inner.scale.setScalar(1.15 - kick);
       outer.position.y = inner.position.y = 5.4 + Math.sin(t * 0.8) * 0.5;
-      this.camera.position.set(Math.sin(t * 0.23) * 3.2, 3.2 + Math.sin(t * 0.31) * 0.5, 9);
+
+      if (this.demoVisual === 'machine') {
+        // Walk a slow arc in front of the machine. The words sit low on the left, so on a
+        // wide screen the camera looks past it that way and the machine lands top right. A
+        // tall screen has no room beside the words: there it stands further back, above them.
+        const wide = this.camera.aspect > 1;
+        const reach = wide ? 10 : 20;
+        const angle = Math.sin(t * 0.3) * 0.6;
+        this.camera.position.set(Math.sin(angle) * reach - 0.4, 2.7, Math.cos(angle) * reach + 1);
+        this.look.set(wide ? -3.4 : -0.3, wide ? -0.5 : -1.9, 1);
+      } else {
+        this.camera.position.set(Math.sin(t * 0.23) * 3.2, 3.2 + Math.sin(t * 0.31) * 0.5, 9);
+        this.look.set(0, 4.6, -30);
+      }
     }
 
     // A little parallax from the pointer, eased so it never jumps.
