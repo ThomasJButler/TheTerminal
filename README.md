@@ -27,28 +27,28 @@ site has had since version 2.
 ## Run it
 
 ```bash
-npm install
+bun install
 ```
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ```bash
-npm run build
+bun run build
 ```
 
 ```bash
-npm test
+bun run test
 ```
 
 ```bash
 python3 scripts/serve-pages.py
 ```
 
-`npm run build` does three things: the client build, a server build, then
+`bun run build` does three things: the client build, a server build, then
 `scripts/prerender.mjs`, which writes one real HTML file per program, file and directory.
-`npm run typecheck` is separate on purpose, so a stray type error cannot take a live URL
+`bun run typecheck` is separate on purpose, so a stray type error cannot take a live URL
 down.
 
 Check a build with `scripts/serve-pages.py`, not `vite preview`. Preview answers every
@@ -92,7 +92,7 @@ asks Pages where the site will live and passes that as `BASE_PATH`, so the same 
 at a domain root and under `/<repo>/`. To build for a sub-path by hand:
 
 ```bash
-BASE_PATH=/tjb-vt100/ SITE_URL=https://thomasjbutler.github.io npm run build
+BASE_PATH=/tjb-vt100/ SITE_URL=https://thomasjbutler.github.io bun run build
 ```
 
 ## Things that are deliberate
