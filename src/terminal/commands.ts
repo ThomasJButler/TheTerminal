@@ -1,51 +1,19 @@
-import { ALL_FILES, ROOT, getNode, parentOf, resolve, urlFor } from '@/fs/tree';
+import { ALL_FILES, ROOT, getNode, parentOf, resolve } from '@/fs/tree';
 import { blockLines, inl, p } from '@/fs/md';
 import type { Block, DirNode, FsNode, Listing } from '@/fs/types';
-import { LINKS, LOCATION, MACHINE, ROLE } from '@/content/site';
+import { FORTUNES, LINKS, LOCATION, MACHINE, NOW, ROLE, SITE_NAME } from '@/content/site';
+import { projects } from '@/content/projects';
+import type { Settings } from '@/machine/settings';
+import type { Ctx, Result } from './types';
 
 /**
- * The command interpreter. Pure: a line and a context in, blocks and a list of effects out.
- * It touches no DOM, no storage and no router, which is what lets the prerender run the
- * same code to produce each page and lets the tests drive it without a browser.
+ * The shell. Pure: a line and a context in, blocks and a list of effects out. It touches no
+ * DOM, no storage and no router, which is what lets the prerender run the same code to
+ * produce each page and lets the tests drive it without a browser.
  */
 
-export interface Settings {
-  phosphor: 'green' | 'amber' | 'white';
-  cols: 80 | 132;
-  rain: boolean;
-  scanlines: boolean;
-}
-
-export const DEFAULT_SETTINGS: Settings = { phosphor: 'green', cols: 80, rain: true, scanlines: true };
-
-export type Effect =
-  | { e: 'clear' }
-  | { e: 'exit' }
-  | { e: 'reboot' }
-  | { e: 'set'; patch: Partial<Settings> }
-  | { e: 'palette' }
-  | { e: 'mail' }
-  | { e: 'href'; href: string }
-  | { e: 'burst' }
-  | { e: 'forget' };
-
-export interface Ctx {
-  cwd: string;
-  settings: Settings;
-  /** Paths of files already read. */
-  found: ReadonlySet<string>;
-  history: readonly string[];
-}
-
-export interface Result {
-  out: Block[];
-  cwd?: string;
-  /** The node this command landed on: drives the URL and the found counter. */
-  visit?: FsNode;
-  effects: Effect[];
-}
-
 const err = (text: string): Block => ({ k: 'err', text });
+const done = (out: Block[], extra: Partial<Result> = {}): Result => ({ out, effects: [], ...extra });
 
 /**
  * Relative to where you are, and failing that, from home. A real shell would refuse
@@ -55,7 +23,6 @@ const err = (text: string): Block => ({ k: 'err', text });
 function lookup(cwd: string, input: string): FsNode | undefined {
   return resolve(cwd, input) ?? resolve('~', input);
 }
-const done = (out: Block[], extra: Partial<Result> = {}): Result => ({ out, effects: [], ...extra });
 
 export function listing(node: FsNode): Listing {
   return {
@@ -90,7 +57,7 @@ function tree(dir: DirNode, all: boolean): Block {
   return { k: 'tree', rows };
 }
 
-function open(node: FsNode): Result {
+export function open(node: FsNode): Result {
   if (node.kind === 'dir') {
     return done(ls(node, false, true), { cwd: node.path, visit: node });
   }
@@ -139,17 +106,46 @@ const HELP: Block[] = [
       { key: 'cat <file>', inl: inl('read a file. The extension is optional') },
       { key: 'grep <word>', inl: inl('search every file on the machine') },
       { key: 'tree', inl: inl('draw the whole filesystem') },
+      { key: 'ask <question>', inl: inl('put a question to the operator without leaving the shell') },
       { key: 'mail', inl: inl('write to me') },
-      { key: 'setup', inl: inl('phosphor, columns, rain') },
+      { key: 'setup', inl: inl('phosphor, columns, sound, voice') },
       { key: 'progress', inl: inl('how much you have found') },
-      { key: 'clear', inl: inl('wipe the screen') },
-      { key: 'exit', inl: inl('step back from the screen') },
+      { key: 'man <command>', inl: inl('the long version of any of these') },
+      { key: 'menu', inl: inl('back to the main menu') },
     ],
   },
-  p('Tab completes. Up and down walk your history. Anything green and underlined can be clicked. This manual does not list everything.', true),
+  p('Other programs run from here too: [operator](<cmd:operator>), [adventure](<cmd:adventure>), [arcade](<cmd:arcade>), [demo](<cmd:demo>), [tour](<cmd:tour>).'),
+  p('Tab completes. Up and down walk your history. Anything underlined can be clicked. This manual does not list everything.', true),
 ];
 
+const MAN: Record<string, { use: string; text: string }> = {
+  ls: { use: 'ls [-a] [-l] [dir]', text: 'Lists a directory. -l adds what each thing is. -a includes the files whose names start with a dot, which a plain ls leaves out.' },
+  cd: { use: 'cd [dir]', text: 'Changes directory. With no argument it goes home. Paths are relative to where you are and, failing that, to home.' },
+  cat: { use: 'cat <file>', text: 'Prints a file. The extension is optional, and so is the command: typing a file name on its own does the same thing.' },
+  grep: { use: 'grep <word>', text: 'Searches the text of every file on the machine, hidden ones included, and shows where the word turns up.' },
+  tree: { use: 'tree [-a] [dir]', text: 'Draws the filesystem from here down. -a includes hidden files.' },
+  ask: { use: 'ask <question>', text: 'Puts one question to the operator and prints the answer here. The operator answers only from the files and shows its working. For a conversation, run operator.' },
+  operator: { use: 'operator', text: 'Starts the operator: an agent that answers questions about Tom from the files on this machine, runs commands for you, and can listen and talk. There is no language model in it.' },
+  adventure: { use: 'adventure', text: 'Starts STANDING START, a text adventure in ten rooms about how Tom got here. Your place is saved on this device.' },
+  arcade: { use: 'arcade | play <game>', text: 'Opens the arcade. Two games written for this screen: trace and decode.' },
+  demo: { use: 'demo', text: 'Runs the demo: three.js, one colour, no models. Any key stops it.' },
+  tour: { use: 'tour', text: 'The machine types for about a minute and shows the highlights. Any key gives you the keyboard back.' },
+  mail: { use: 'mail', text: `Opens a message to ${LINKS.email}.` },
+  setup: { use: 'setup', text: 'Shows the settings: phosphor, columns, rain, scanlines, sound, keyclick and voice. Each is changed with set.' },
+  set: { use: 'set <setting> <value>', text: 'Changes a setting. set phosphor green|amber|white, set cols 80|132, and on|off for rain, scanlines, sound, keyclick and voice. Settings are kept on this device only.' },
+  progress: { use: 'progress', text: 'Shows how many of the files on the machine you have read. Some are not listed by a plain ls.' },
+  history: { use: 'history', text: 'Lists the commands you have typed this visit. Up and down walk through them.' },
+  clear: { use: 'clear', text: 'Wipes the screen. Ctrl+L does the same.' },
+  menu: { use: 'menu', text: 'Goes back to the main menu. So does exit.' },
+  man: { use: 'man <command>', text: 'Prints the manual page for a command. You have found it.' },
+  fortune: { use: 'fortune', text: 'Prints one line Tom wrote, picked at random.' },
+  finger: { use: 'finger [tom]', text: 'Who is on this machine, and what they are up to.' },
+  selftest: { use: 'selftest', text: 'The machine checks its own parts, the way a VT100 did when you switched it on: the display, the sound, the voice, the storage. It reports what works in this browser and what does not.' },
+};
+
 function setup(s: Settings): Block[] {
+  const onoff = (key: string, value: boolean) =>
+    inl(`**${value ? 'ON' : 'OFF'}** : [on](<cmd:set ${key} on>) · [off](<cmd:set ${key} off>)`);
   return [
     { k: 'banner', text: 'SET-UP' },
     {
@@ -157,28 +153,57 @@ function setup(s: Settings): Block[] {
       rows: [
         { key: 'PHOSPHOR', inl: inl(`**${s.phosphor.toUpperCase()}** : [green](<cmd:set phosphor green>) · [amber](<cmd:set phosphor amber>) · [white](<cmd:set phosphor white>)`) },
         { key: 'COLUMNS', inl: inl(`**${s.cols}** : [80](<cmd:set cols 80>) · [132](<cmd:set cols 132>)`) },
-        { key: 'RAIN', inl: inl(`**${s.rain ? 'ON' : 'OFF'}** : [on](<cmd:set rain on>) · [off](<cmd:set rain off>)`) },
-        { key: 'SCANLINES', inl: inl(`**${s.scanlines ? 'ON' : 'OFF'}** : [on](<cmd:set scanlines on>) · [off](<cmd:set scanlines off>)`) },
+        { key: 'RAIN', inl: onoff('rain', s.rain) },
+        { key: 'SCANLINES', inl: onoff('scanlines', s.scanlines) },
+        { key: 'SOUND', inl: onoff('sound', s.sound) },
+        { key: 'KEYCLICK', inl: onoff('keyclick', s.keyclick) },
+        { key: 'VOICE', inl: onoff('voice', s.voice) },
       ],
     },
     p('Settings are kept on this device only.', true),
   ];
 }
 
-function set(args: string[], s: Settings): Result {
+const TOGGLES = ['rain', 'scanlines', 'sound', 'keyclick', 'voice'] as const;
+
+function set(args: string[], ctx: Ctx): Result {
   const [key, value] = args.map((a) => a.toLowerCase());
   const on = value === 'on' || value === 'true' || value === '1';
   const off = value === 'off' || value === 'false' || value === '0';
   let patch: Partial<Settings> | null = null;
   if (key === 'phosphor' && (value === 'green' || value === 'amber' || value === 'white')) patch = { phosphor: value };
   else if ((key === 'cols' || key === 'columns') && (value === '80' || value === '132')) patch = { cols: value === '80' ? 80 : 132 };
-  else if (key === 'rain' && (on || off)) patch = { rain: on };
-  else if (key === 'scanlines' && (on || off)) patch = { scanlines: on };
-  if (!patch) return done([err('usage: set phosphor green|amber|white · set cols 80|132 · set rain on|off · set scanlines on|off')]);
-  return { out: setup({ ...s, ...patch }), effects: [{ e: 'set', patch }] };
+  else if ((on || off) && (TOGGLES as readonly string[]).includes(key)) patch = { [key]: on };
+  if (!patch) {
+    return done([err('usage: set phosphor green|amber|white · set cols 80|132 · set rain|scanlines|sound|keyclick|voice on|off')]);
+  }
+  if (patch.voice && !ctx.caps.speak) return done([err('This browser has no speech synthesis, so there is no voice to turn on.')]);
+  return { out: setup({ ...ctx.settings, ...patch }), effects: [{ e: 'set', patch }] };
 }
 
-/** Commands the manual leaves out. Each returns a Result or null to fall through. */
+function calendar(now: Date): string {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const title = now.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+  const days = new Date(year, month + 1, 0).getDate();
+  const cells = [...Array(lead).fill('  '), ...Array.from({ length: days }, (_, i) => String(i + 1).padStart(2))];
+  const rows: string[] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7).join(' '));
+  return [title.padStart(10 + Math.ceil(title.length / 2)), 'Mo Tu We Th Fr Sa Su', ...rows].join('\n');
+}
+
+function top(): string {
+  const running = projects.filter((x) => x.status === 'in-progress' || x.status === 'coming-soon');
+  const rows = [
+    '  PID  STATE        COMMAND',
+    `    1  RUNNING      levocell --role "${ROLE.toLowerCase()}"`,
+    ...running.map((x, i) => `${String(i + 2).padStart(5)}  ${(x.status === 'in-progress' ? 'IN PROGRESS' : 'COMING SOON').padEnd(11)}  ${x.id}`),
+  ];
+  return rows.join('\n');
+}
+
+/** Commands the manual leaves out. Each returns a Result, or null to fall through. */
 function egg(line: string, cmd: string, args: string[], ctx: Ctx): Result | null {
   const lower = line.toLowerCase();
   if (cmd === 'sudo') {
@@ -198,12 +223,41 @@ function egg(line: string, cmd: string, args: string[], ctx: Ctx): Result | null
   if (lower.includes('rabbit')) return open(getNode('~/.rabbit')!);
   if (lower === 'red pill') return { out: [p('You stay in Wonderland.')], effects: [{ e: 'set', patch: { phosphor: 'amber' } }] };
   if (lower === 'blue pill') return { out: [p('You wake up in your bed and believe whatever you want to believe.')], effects: [{ e: 'set', patch: { phosphor: 'green' } }] };
-  if (cmd === 'hello' || cmd === 'hi' || cmd === 'hey') return done([p("Hello. I'm a website, but Tom is real: [mail](<cmd:mail>) reaches him.")]);
-  if (cmd === 'uname') return done([p(`${MACHINE} 6.0 react-19 three.js phosphor/${ctx.settings.phosphor} ${ctx.settings.cols}col`)]);
+  if (cmd === 'hello' || cmd === 'hi' || cmd === 'hey') return done([p("Hello. I'm a website, but Tom is real: [mail](<cmd:mail>) reaches him. Or try the [operator](<cmd:operator>).")]);
+  if (cmd === 'uname' || cmd === 'version' || cmd === 'ver') {
+    return done([p(`${MACHINE} 6.0 react-19 three.js phosphor/${ctx.settings.phosphor} ${ctx.settings.cols}col`)]);
+  }
   if (cmd === 'xyzzy') return done([p('Nothing happens.')]);
   if (cmd === 'forget') return { out: [p('Found list wiped. As far as this machine knows, you have never been here.', true)], effects: [{ e: 'forget' }] };
+  if (cmd === 'fortune') return done([{ k: 'quote', inl: [{ t: 'text', text: FORTUNES[Math.floor(Math.random() * FORTUNES.length)] }] }]);
+  if (cmd === 'finger' || cmd === 'whois') {
+    return done([{
+      k: 'kv',
+      rows: [
+        { key: 'LOGIN', inl: inl('tom') },
+        { key: 'NAME', inl: inl(SITE_NAME) },
+        { key: 'ROLE', inl: inl(ROLE) },
+        { key: 'WHERE', inl: inl(LOCATION) },
+        { key: 'ON SINCE', inl: inl('early 2022') },
+        { key: 'PLAN', inl: inl(NOW[0]) },
+      ],
+    }]);
+  }
+  if (cmd === 'banner') return done(args.length ? [{ k: 'h', level: 1, text: args.join(' ') }] : [err('usage: banner <text>')]);
+  if (cmd === 'top' || cmd === 'ps') return done([{ k: 'pre', text: top() }, p('The files are in `projects/`.', true)]);
+  if (cmd === 'uptime') {
+    const years = new Date().getFullYear() - 2022;
+    return done([p(`up ${years} years, from a standing start in early 2022. Load average: one job, and more side projects than is sensible.`)]);
+  }
+  if (cmd === 'cal') return done([{ k: 'pre', text: calendar(new Date()) }]);
+  if (cmd === 'bell' || cmd === 'beep') return { out: [p('^G', true)], effects: [{ e: 'bell' }] };
+  if (cmd === 'ping') return done([p('ping: he is a person, not a host. [mail](<cmd:mail>) reaches him.')]);
+  if (cmd === 'ssh' || cmd === 'telnet' || cmd === 'ftp') return done([p(`${cmd}: you are already in.`)]);
+  if (cmd === 'make') return done([p('make: nothing to be done. Everything on this machine is already built.')]);
   return null;
 }
+
+const GAMES = ['trace', 'decode'];
 
 export function exec(line: string, ctx: Ctx): Result {
   const trimmed = line.trim().replace(/\s+/g, ' ');
@@ -217,8 +271,14 @@ export function exec(line: string, ctx: Ctx): Result {
   switch (cmd) {
     case 'help':
     case '?':
-    case 'man':
       return done(HELP);
+
+    case 'man': {
+      if (!rest[0]) return done(HELP);
+      const page = MAN[rest[0].toLowerCase()];
+      if (!page) return done([err(`No manual entry for ${rest[0]}.`)]);
+      return done([{ k: 'kv', rows: [{ key: 'NAME', inl: inl(rest[0].toLowerCase()) }, { key: 'SYNOPSIS', inl: [{ t: 'code', text: page.use }] }, { key: 'DESCRIPTION', inl: inl(page.text) }] }]);
+    }
 
     case 'ls':
     case 'dir':
@@ -286,11 +346,6 @@ export function exec(line: string, ctx: Ctx): Result {
     case 'cls':
       return { out: [], effects: [{ e: 'clear' }] };
 
-    case 'exit':
-    case 'logout':
-    case 'quit':
-      return { out: [p('Stepping back.', true)], effects: [{ e: 'exit' }] };
-
     case 'reboot':
       return { out: [], effects: [{ e: 'reboot' }] };
 
@@ -299,7 +354,7 @@ export function exec(line: string, ctx: Ctx): Result {
       return done(setup(ctx.settings));
 
     case 'set':
-      return set(args, ctx.settings);
+      return set(args, ctx);
 
     case 'mail':
     case 'contact':
@@ -324,13 +379,70 @@ export function exec(line: string, ctx: Ctx): Result {
     case 'versions':
       return open(getNode('~/versions/history.txt')!);
 
+    /* Programs: everything that is not this shell */
+
+    case 'menu':
+    case 'home':
+    case 'exit':
+    case 'logout':
+    case 'quit':
+      return { out: [], effects: [{ e: 'program', program: 'menu' }] };
+
+    case 'shell':
+    case 'terminal':
+    case 'sh':
+      return { out: [], effects: [{ e: 'program', program: 'shell' }] };
+
+    case 'operator':
+    case 'agent':
+    case 'chat':
+    case 'talk':
+      return { out: [], effects: [{ e: 'program', program: 'operator' }] };
+
+    case 'adventure':
+    case 'adv':
+      return { out: [], effects: [{ e: 'program', program: 'adventure' }] };
+
+    case 'arcade':
+    case 'games':
+      return { out: [p('Opening the arcade.', true)], effects: [{ e: 'go', to: 'arcade' }] };
+
+    case 'trace':
+    case 'decode':
+      return { out: [p(`Loading ${cmd.toUpperCase()}.`, true)], effects: [{ e: 'go', to: 'arcade', game: cmd }] };
+
+    case 'play': {
+      const what = rest[0]?.toLowerCase();
+      if (what === 'adventure') return { out: [], effects: [{ e: 'program', program: 'adventure' }] };
+      if (what && GAMES.includes(what)) return { out: [p(`Loading ${what.toUpperCase()}.`, true)], effects: [{ e: 'go', to: 'arcade', game: what }] };
+      if (!what) return { out: [p('Opening the arcade.', true)], effects: [{ e: 'go', to: 'arcade' }] };
+      return done([err(`play: no game called ${what}. There is trace, decode and adventure.`)]);
+    }
+
+    case 'demo':
+      if (!ctx.caps.scene) return done([err('The demo is drawn with WebGL, and this browser has not got it.')]);
+      return { out: [p('Lights off.', true)], effects: [{ e: 'go', to: 'demo' }] };
+
+    case 'tour':
+      return { out: [p('Sit back. The machine does the typing from here, and any key gives you the keyboard back.', true)], effects: [{ e: 'tour' }] };
+
+    case 'selftest':
+    case 'diag':
+    case 'test':
+      return { out: [p('Running the self-test.', true)], effects: [{ e: 'selftest' }] };
+
+    case 'stepback':
+    case 'outside':
+      if (!ctx.caps.scene) return done([err('There is no outside to step back to: this browser cannot draw the machine.')]);
+      return { out: [p('Stepping back.', true)], effects: [{ e: 'stepBack' }] };
+
     default: {
       const hidden = egg(trimmed, cmd, args, ctx);
       if (hidden) return hidden;
       // A bare path is a request to open it: `projects`, `about.txt`, `./now`.
       const target = lookup(ctx.cwd, trimmed);
       if (target && target !== ROOT) return open(target);
-      return done([err(`${rawCmd}: command not found. Try help, or ls`)]);
+      return { out: [err(`${rawCmd}: command not found. Try help, or ls`)], effects: [], unknown: true };
     }
   }
 }
@@ -338,8 +450,8 @@ export function exec(line: string, ctx: Ctx): Result {
 /* ─── Tab completion ─── */
 
 export const COMMANDS = [
-  'cat', 'cd', 'clear', 'exit', 'grep', 'help', 'history', 'ls', 'mail', 'progress', 'pwd',
-  'setup', 'set', 'tree', 'whoami',
+  'adventure', 'arcade', 'ask', 'cat', 'cd', 'clear', 'demo', 'exit', 'grep', 'help', 'history', 'ls', 'mail', 'man',
+  'menu', 'operator', 'play', 'progress', 'pwd', 'set', 'setup', 'tour', 'tree', 'whoami',
 ];
 
 export function complete(line: string, cwd: string): { line: string; options: string[] } {
@@ -365,21 +477,9 @@ export function complete(line: string, cwd: string): { line: string; options: st
   return { line: `${head} ${base}${common}`, options: hits.length > 1 ? names : [] };
 }
 
-/* ─── The session a URL opens on ─── */
-
-export interface Entry {
-  id: number;
-  cwd: string;
-  /** null for output that no command produced: the boot banner. */
-  cmd: string | null;
-  out: Block[];
-}
-
+/** The line every session opens on: the modem's side of the conversation. */
 export function bootBlocks(): Block[] {
-  return [
-    { k: 'banner', text: `${MACHINE} · ONLINE` },
-    p(`${ALL_FILES.length} files · 80 columns · type [help](<cmd:help>) if you are lost`, true),
-  ];
+  return [p(`ATDT ${MACHINE} · CONNECT 9600 · ${ALL_FILES.length} FILES ON LINE`, true)];
 }
 
 /** The command that shows a node, phrased the way a person would type it from home. */
@@ -387,27 +487,3 @@ export function commandFor(node: FsNode): string {
   const rel = node.path === '~' ? '~' : node.path.slice(2);
   return node.kind === 'dir' ? `cd ${rel}` : `cat ${rel}`;
 }
-
-/**
- * What the screen shows for a URL before anybody has typed anything. The server and the
- * browser both call this with the same pathname, so the prerendered HTML and the hydrating
- * render agree.
- */
-export function sessionFor(node: FsNode | undefined): { entries: Entry[]; cwd: string } {
-  const boot: Entry = { id: 0, cwd: '~', cmd: null, out: bootBlocks() };
-  if (!node) {
-    // No command line, and nothing taken from the address: 404.html is one prerendered file
-    // served at every unknown URL, so its markup cannot depend on which URL that was.
-    return {
-      cwd: '~',
-      entries: [boot, {
-        id: 1, cwd: '~', cmd: null,
-        out: [err('404: nothing at that address on this machine.'), p('It may have moved. [ls](<cmd:ls>) shows what is here, [grep](<cmd:grep>) searches it.')],
-      }],
-    };
-  }
-  const result = open(node);
-  return { cwd: result.cwd ?? '~', entries: [boot, { id: 1, cwd: '~', cmd: commandFor(node), out: result.out }] };
-}
-
-export { urlFor };
