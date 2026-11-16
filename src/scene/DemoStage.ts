@@ -319,10 +319,16 @@ export class DemoStage {
   private meteors: { at: THREE.Vector3; speed: THREE.Vector3; life: number }[] = [];
   private meteorLines: THREE.BufferGeometry | null = null;
   private nextMeteor = 2;
-  private scan: THREE.LineLoop | null = null;
+  private scan: THREE.Group | null = null;
   private scanMaterial: THREE.LineBasicMaterial | null = null;
   /** How hard the last beat is still landing, from 1 down to nothing. */
   kick = 0;
+  /** A burst of light, from a cut or a gate going past. The glow reads it. */
+  flash = 0;
+  /** What a cut leaves behind: a second of extra speed and a wider lens, dying away. */
+  private surge = 0;
+  private forms: THREE.Object3D[][] = [];
+  private formed = 1;
   private dim: THREE.LineBasicMaterial;
   private bright: THREE.LineBasicMaterial;
   private sun: THREE.Object3D | null = null;
@@ -613,11 +619,20 @@ export class DemoStage {
       geometry.dispose();
       return new THREE.LineSegments(made, this.bright);
     };
-    this.solids = [
-      edges(new THREE.IcosahedronGeometry(2.7, 0)),
-      edges(new THREE.DodecahedronGeometry(1.8, 0)),
-      edges(new THREE.OctahedronGeometry(0.95, 0)),
+    // The core has several forms, each three shapes nested, and a cut moves it on to the
+    // next. Seven projects in a row would otherwise be seven looks at the same object.
+    const knotted = new THREE.TorusKnotGeometry(1.75, 0.5, 72, 5);
+    const knot = new THREE.LineSegments(this.keep(new THREE.WireframeGeometry(knotted)), this.dim);
+    knotted.dispose();
+    this.forms = [
+      [edges(new THREE.IcosahedronGeometry(2.7, 0)), edges(new THREE.DodecahedronGeometry(1.8, 0)), edges(new THREE.OctahedronGeometry(0.95, 0))],
+      [edges(new THREE.OctahedronGeometry(2.9, 0)), edges(new THREE.IcosahedronGeometry(1.7, 0)), edges(new THREE.TetrahedronGeometry(0.9, 0))],
+      [edges(new THREE.BoxGeometry(3.7, 3.7, 3.7)), edges(new THREE.BoxGeometry(2.3, 2.3, 2.3)), edges(new THREE.BoxGeometry(1.15, 1.15, 1.15))],
+      [knot, edges(new THREE.DodecahedronGeometry(1.0, 0)), edges(new THREE.TetrahedronGeometry(0.55, 0))],
+      [edges(new THREE.DodecahedronGeometry(2.7, 0)), edges(new THREE.TetrahedronGeometry(1.9, 0)), edges(new THREE.IcosahedronGeometry(0.9, 0))],
     ];
+    this.forms.forEach((form, i) => form.forEach((shape) => (shape.visible = i === 0)));
+    this.solids = this.forms[0];
     this.rings = [3.5, 3.9, 4.3].map((r) => this.segments(circle(r, 72), this.bright));
 
     const count = 900;
@@ -637,7 +652,7 @@ export class DemoStage {
     const swarm = new THREE.Points(geometry, this.glow(SWARM_VERT, DOT_FRAG));
     swarm.frustumCulled = false;
 
-    this.core.add(...this.solids, ...this.rings, swarm);
+    this.core.add(...this.forms.flat(), ...this.rings, swarm);
     this.core.position.set(0, 6.2, -22);
     this.core.visible = false;
     this.group.add(this.core);
@@ -645,11 +660,12 @@ export class DemoStage {
 
   /** A frame that climbs the machine and starts again, like something reading it. */
   private buildScan() {
-    const frame = this.keep(new THREE.BufferGeometry().setFromPoints(
-      [[-3, -2.4], [3, -2.4], [3, 4.5], [-3, 4.5]].map(([x, z]) => new THREE.Vector3(x, 0, z)),
+    const frame = (grow: number) => this.keep(new THREE.BufferGeometry().setFromPoints(
+      [[-3 - grow, -2.4 - grow], [3 + grow, -2.4 - grow], [3 + grow, 4.5 + grow], [-3 - grow, 4.5 + grow]].map(([x, z]) => new THREE.Vector3(x, 0, z)),
     ));
     this.scanMaterial = this.keep(new THREE.LineBasicMaterial({ color: this.shared.uColor.value, transparent: true, opacity: 0 }));
-    this.scan = new THREE.LineLoop(frame, this.scanMaterial);
+    this.scan = new THREE.Group();
+    this.scan.add(new THREE.LineLoop(frame(0), this.scanMaterial), new THREE.LineLoop(frame(0.12), this.scanMaterial));
     this.scan.visible = false;
     this.group.add(this.scan);
   }
@@ -690,6 +706,18 @@ export class DemoStage {
     if (visual !== 'road') for (const gate of this.gates) gate.visible = false;
   }
 
+  /** The film has moved on a shot: a surge of speed and light, and the core changes form. */
+  cut(index: number) {
+    this.surge = 1;
+    this.flash = Math.max(this.flash, 0.7);
+    const next = this.forms[index % this.forms.length];
+    if (next === this.solids) return;
+    for (const shape of this.solids) shape.visible = false;
+    for (const shape of next) shape.visible = true;
+    this.solids = next;
+    this.formed = 0;
+  }
+
   /** Send a gate down the road towards the camera. */
   gate() {
     const free = this.gates.find((g) => !g.visible);
@@ -721,8 +749,11 @@ export class DemoStage {
     this.kick = kick;
     this.shared.uPulse.value = phase;
 
+    this.surge *= Math.exp(-dt * 2.6);
+    this.flash *= Math.exp(-dt * 4);
+    this.formed = Math.min(1, this.formed + dt * 2.2);
     this.pace += (want.pace - this.pace) * ease(1.6);
-    this.shared.uTravel.value += dt * this.pace;
+    this.shared.uTravel.value += dt * (this.pace + this.surge * 46);
     this.valley.value += (want.valley - this.valley.value) * ease(1.1);
     this.cityShow.value += (want.city - this.cityShow.value) * ease(1.3);
     this.city.visible = this.cityShow.value > 0.004;
@@ -737,12 +768,15 @@ export class DemoStage {
       const climb = (beats / 2) % 1;
       this.scan.visible = this.visual === 'machine';
       this.scan.position.y = 0.05 + climb * 3.1;
-      this.scanMaterial.opacity = Math.sin(climb * Math.PI) * 0.75;
+      this.scanMaterial.opacity = Math.sin(climb * Math.PI);
     }
 
     for (const gate of this.gates) {
       if (!gate.visible) continue;
+      const before = gate.position.z;
       gate.position.z += dt * this.pace;
+      // Going through one lights the frame up for a moment.
+      if (before <= 8 && gate.position.z > 8) this.flash = Math.max(this.flash, 0.55);
       if (gate.position.z > 12) gate.visible = false;
     }
 
@@ -754,7 +788,10 @@ export class DemoStage {
       inner.rotation.set(t * 1.1, -t * 0.8, t * 0.5);
       inner.scale.setScalar(1.2 - kick * 0.25);
       this.rings.forEach((ring, i) => ring.rotation.set(t * (0.5 + i * 0.17) + i * 2.1, t * (0.3 - i * 0.21), i * 1.3));
-      this.core.scale.setScalar(Math.max(0.001, this.coreShow) * 1.45);
+      // A new form arrives small and overshoots a little before it settles.
+      const f = this.formed - 1;
+      const pop = 1 + 2.7 * f * f * f + 1.7 * f * f;
+      this.core.scale.setScalar(Math.max(0.001, this.coreShow) * 1.45 * (0.35 + 0.65 * pop));
       this.core.position.y = 6.2 + Math.sin(t * 0.8) * 0.45;
     }
 
@@ -791,6 +828,12 @@ export class DemoStage {
     look.lerp(this.wantLook, ease(1.8));
     this.roll += (roll - this.roll) * ease(2);
     camera.up.set(Math.sin(this.roll), Math.cos(this.roll), 0);
+    // The lens opens on a cut and closes again, which is most of what makes it feel like speed.
+    const fov = 38 + this.surge * 9;
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
     this.snap = false;
   }
 
