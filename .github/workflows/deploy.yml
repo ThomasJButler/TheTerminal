@@ -19,18 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: 1.3.13
       - id: pages
         uses: actions/configure-pages@v5
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
       # Pages tells us where the site will live, so the same build works as a project site
       # (/repo-name/) and as a user site or custom domain (/).
-      - run: npm run build
+      - run: bun run build
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           SITE_URL: ${{ steps.pages.outputs.origin }}
