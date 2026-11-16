@@ -1,10 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import type { Phosphor, Scene } from './Scene';
+import type { DemoVisual, Phosphor, Scene } from './Scene';
 
 export interface SceneHandle {
   enter: (onGlass: () => void) => Promise<void>;
   exit: () => Promise<void>;
   burst: () => void;
+  /** Send a gate down the demo's road. */
+  gate: () => void;
 }
 
 interface Props {
@@ -12,8 +14,8 @@ interface Props {
   initialMode: 'attract' | 'inside';
   phosphor: Phosphor;
   rain: boolean;
-  /** Whether the demo has the screen. */
-  demo: boolean;
+  /** What the demo is showing, or null when it does not have the screen. */
+  demo: DemoVisual | null;
   /** The music's beat, for the demo to move to. */
   beat: () => number | null;
   onReady: () => void;
@@ -66,6 +68,7 @@ export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
     enter: (onGlass) => sceneRef.current?.enter(onGlass) ?? (onGlass(), Promise.resolve()),
     exit: () => sceneRef.current?.exit() ?? Promise.resolve(),
     burst: () => sceneRef.current?.burst(),
+    gate: () => sceneRef.current?.gate(),
   }));
 
   return <canvas ref={canvasRef} className="scene" data-ready={ready ? '' : undefined} aria-hidden="true" />;
