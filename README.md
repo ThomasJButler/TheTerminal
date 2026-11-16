@@ -10,14 +10,14 @@ connects, and the main menu prints down the screen.
 Everything after that happens in the terminal. The menu is a prompt: type a number, a name,
 or any command.
 
-| | Program | What it demonstrates |
+| | Program | What it is |
 | --- | --- | --- |
-| 1 | **TERMINAL** | The shell. Every project, client, skill and blog post is a file. `ls`, `cd`, `cat`, `grep`, and some of it only shows up with `ls -a`. |
+| 1 | **DEMO** | Three minutes of film, with nothing to type: who he is, what he builds, the road here, the projects. Drawn in three.js, in one colour, with a tune. It is first because most people would rather watch than use a shell. |
 | 2 | **OPERATOR** | An agent that answers questions about Tom from the files, shows its working, runs commands for you, and can listen and talk. There is no language model in it. |
-| 3 | **ARCADE** | Two games drawn in characters: TRACE and DECODE. |
+| 3 | **ARCADE** | Fourteen games. TRACE and DECODE are drawn in characters on this screen. The other twelve are The Matrix Arcade, framed in from its own address. |
 | 4 | **ADVENTURE** | STANDING START, a text adventure in ten rooms about how he got here. |
-| 5 | **DEMO** | Three.js, one colour, no models, with a tune. |
-| 6 | **TOUR** | The machine types for a minute and shows the highlights. |
+| 5 | **TOUR** | The shell, driven for you: the machine types and shows the highlights. |
+| 6 | **TERMINAL** | The shell. Every project, client, skill and blog post is a file. `ls`, `cd`, `cat`, `grep`, and some of it only shows up with `ls -a`. |
 | 7 | **WHAT I BUILD** | Eight kinds of thing, each with something to check. |
 
 The reference is the DEC VT100 of 1978 (80 columns, a detachable keyboard, a 132 column
@@ -65,7 +65,8 @@ serves `dist/` the way GitHub Pages does.
 | `src/terminal/interpret.ts` | One prompt, four interpreters: the menu, the shell, the operator and the adventure. Also which address opens on which screen. |
 | `src/programs/operator.ts` | The agent: a router, a BM25 index over the files, and a confidence check. `operator.test.ts` is its eval set. |
 | `src/programs/adventure.ts` | The adventure: rooms, things and a parser, as a pure state machine. |
-| `src/arcade/` | A character-cell screen (`engine.ts`) and the two games written on it. |
+| `src/arcade/` | A character-cell screen (`engine.ts`), the two games written on it, and the frame The Matrix Arcade sits in. `games.ts` lists all of it. |
+| `src/demo/` | `reel.ts` is the demo as a list of shots, every line read from the content. `DemoView.tsx` plays it. |
 | `src/scene/Scene.ts` | The three.js layer: the machine, the rain and the demo. Loaded as its own chunk. |
 | `src/machine/` | `useMachine.ts` is all the state. `sound.ts` synthesises every sound. `speech.ts` wraps the browser's speech APIs. |
 | `src/terminal/Terminal.tsx`, `Blocks.tsx`, `Overlays.tsx` | What draws it. The overlays are the shadcn dialogs: FIND, MAIL and the plate viewer. |
@@ -83,7 +84,10 @@ serves `dist/` the way GitHub Pages does.
 - **A question the operator should get right:** add it to the eval in
   `src/programs/operator.test.ts` first, with the file a good answer has to come from, and
   then make it pass.
-- **A game:** write a `GameFactory` in `src/arcade/`, list it in `games.ts`.
+- **A game:** write a `GameFactory` in `src/arcade/`, list it in `games.ts`. One that lives
+  elsewhere only needs an `embed` address there.
+- **A shot in the demo:** add it to `REEL` in `src/demo/reel.ts`. `reel.test.ts` checks it
+  leaves time to be read and that the whole thing still runs for about three minutes.
 
 ## Deploying
 
@@ -111,5 +115,8 @@ BASE_PATH=/tjb-vt100/ SITE_URL=https://thomasjbutler.github.io bun run build
   in Chrome and Safari that can mean audio goes to Google or Apple, and it says that before
   it listens.
 - **Hidden files stay out of the sitemap and out of FIND** until you have read them.
+- **The demo is also a page.** Until it is playing, every shot is on the page in order.
+  That is what a crawler reads, what shows without JavaScript, and what someone who has
+  asked for less motion gets, with the film one button away.
 - **The adventure's prose is a draft.** Every fact in it is from Tom's own copy; the
   furniture around the facts is invented and wants rewriting in his voice.
