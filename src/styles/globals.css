@@ -1,0 +1,724 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * One hue, set by the phosphor. Everything on screen is that hue at a different lightness,
+ * the way a real tube only has one colour to offer. `set phosphor amber` changes two
+ * numbers and the whole machine follows, the 3D scene included (it reads --ph).
+ */
+:root {
+  --hue: 145;
+  --c: 0.22;
+
+  --screen: oklch(0.1 0.02 var(--hue));
+  --void: oklch(0.07 0.012 var(--hue));
+  --ink: oklch(0.9 calc(var(--c) * 0.5) var(--hue));
+  --ink-dim: oklch(0.7 calc(var(--c) * 0.45) var(--hue));
+  --ph: oklch(0.87 var(--c) var(--hue));
+  --ph-soft: oklch(0.87 var(--c) var(--hue) / 0.14);
+  --ph-line: oklch(0.87 var(--c) var(--hue) / 0.3);
+  --warn: oklch(0.8 0.15 70);
+
+  --cols: 80;
+  --fs: clamp(13px, calc((100vw - 2.5rem) / 80 / 0.6), 17px);
+
+  /* shadcn's token names, mapped onto the tube. */
+  --background: var(--void);
+  --foreground: var(--ink);
+  --card: var(--screen);
+  --card-foreground: var(--ink);
+  --popover: var(--screen);
+  --popover-foreground: var(--ink);
+  --primary: var(--ph);
+  --primary-foreground: oklch(0.12 0.03 var(--hue));
+  --secondary: oklch(0.18 0.03 var(--hue));
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.16 0.025 var(--hue));
+  --muted-foreground: var(--ink-dim);
+  --accent: oklch(0.2 0.04 var(--hue));
+  --accent-foreground: var(--ink);
+  --destructive: oklch(0.7 0.19 25);
+  --border: var(--ph-line);
+  --input: var(--ph-line);
+  --ring: var(--ph);
+  --radius: 0.125rem;
+}
+
+:root[data-phosphor='amber'] {
+  --hue: 75;
+  --c: 0.17;
+}
+:root[data-phosphor='white'] {
+  --hue: 220;
+  --c: 0.03;
+}
+:root[data-cols='132'] {
+  --cols: 132;
+  --fs: clamp(10px, calc((100vw - 2.5rem) / 132 / 0.6), 14px);
+}
+
+@theme inline {
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-display: 'VT323', 'IBM Plex Mono', ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    background: var(--void);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--fs);
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--ph-line) transparent;
+    scrollbar-width: thin;
+    scroll-padding-top: 3.1rem;
+    scroll-padding-bottom: 7rem;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--void);
+  }
+  ::selection {
+    background: var(--ph);
+    color: var(--void);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ph);
+    outline-offset: 2px;
+  }
+}
+
+/* ─── The 3D layer ─── */
+
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+.scene[data-ready] {
+  opacity: 1;
+}
+.scene[data-off] {
+  visibility: hidden;
+}
+
+/* ─── The intro: the machine in the void, before anyone sits down at it ─── */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 1rem 5vh;
+  cursor: pointer;
+  transition: opacity 500ms ease;
+}
+.intro[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+}
+.intro__key {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+  letter-spacing: 0.16em;
+  color: var(--ph);
+  background: none;
+  border: 0;
+  padding: 0.4em 0.8em;
+  cursor: pointer;
+  text-shadow: 0 0 18px var(--ph-line);
+}
+.intro__key::after {
+  content: '█';
+  margin-left: 0.3em;
+  animation: blink 1.06s steps(1) infinite;
+}
+.intro__hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+}
+
+/* ─── The terminal ─── */
+
+.tty {
+  position: relative;
+  z-index: 10;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  /* The rain is behind this. The wash is what keeps body text readable on top of it. */
+  background: linear-gradient(
+    90deg,
+    oklch(0.07 0.012 var(--hue) / 0.45),
+    oklch(0.07 0.012 var(--hue) / 0.9) 22%,
+    oklch(0.07 0.012 var(--hue) / 0.9) 78%,
+    oklch(0.07 0.012 var(--hue) / 0.45)
+  );
+  transition: opacity 600ms ease;
+}
+/* Set before first paint by the inline script in index.html, on a cold visit to '/'. */
+html[data-boot='intro'] .tty {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tty-col {
+  width: min(100%, calc(var(--cols) * 0.6rem + 2.5rem));
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.tty-status {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--void);
+  border-bottom: 1px solid var(--ph-line);
+}
+.tty-status__row {
+  display: flex;
+  gap: 1.5ch;
+  align-items: baseline;
+  padding-block: 0.45rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.tty-status__name {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: var(--void);
+  background: var(--ph);
+  padding: 0.05em 0.5em 0;
+  text-decoration: none;
+}
+.tty-status__cwd {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.tty-status__meta {
+  display: none;
+}
+@media (min-width: 640px) {
+  .tty-status__meta {
+    display: inline;
+  }
+}
+.tty-status__found {
+  color: var(--ph);
+  font-variant-numeric: tabular-nums;
+}
+
+.tty-main {
+  flex: 1;
+  padding-block: 1.25rem 2rem;
+}
+
+.tty-entry {
+  margin-bottom: 1.6rem;
+}
+.tty-cmd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1ch;
+  color: var(--ink);
+  margin: 0 0 0.5rem;
+}
+.tty-ps1 {
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.tty-ps1 b {
+  color: var(--ph);
+  font-weight: 500;
+}
+@media (max-width: 520px) {
+  .tty-ps1__host {
+    display: none;
+  }
+}
+
+.tty-out > * {
+  margin: 0 0 0.85rem;
+}
+.tty-out > *:last-child {
+  margin-bottom: 0;
+}
+/* Fresh output arrives a block at a time, the way a slow line would deliver it. */
+.tty-entry[data-fresh] .tty-out > * {
+  animation: arrive 90ms steps(2) both;
+  animation-delay: calc(min(var(--i), 28) * 26ms);
+}
+
+.tty-h1,
+.tty-h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--ph);
+  line-height: 1;
+  text-wrap: balance;
+}
+.tty-h1 {
+  font-size: clamp(2.2rem, 5.2vw, 3.3rem);
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 22px var(--ph-line);
+  padding-top: 0.25rem;
+}
+.tty-h2 {
+  font-size: 1.65rem;
+  letter-spacing: 0.04em;
+  margin-top: 1.5rem !important;
+  margin-bottom: 0.45rem !important;
+}
+.tty-h2::before {
+  content: '▌';
+  margin-right: 0.35em;
+  opacity: 0.7;
+}
+.tty-h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ph);
+  margin-top: 1.2rem !important;
+}
+
+.tty-p {
+  max-width: 76ch;
+  text-wrap: pretty;
+}
+.tty-dim {
+  color: var(--ink-dim);
+}
+.tty-b {
+  color: var(--ph);
+  font-weight: 500;
+}
+.tty-code {
+  color: var(--ph);
+  background: var(--ph-soft);
+  padding: 0 0.4ch;
+}
+
+.tty-link {
+  color: var(--ph);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: var(--ph-line);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.tty-link:hover {
+  background: var(--ph);
+  color: var(--void);
+  text-decoration-color: transparent;
+}
+.tty-link[data-ext]::after {
+  content: '↗';
+  font-size: 0.8em;
+  margin-left: 0.2ch;
+  display: inline-block;
+}
+
+.tty-list {
+  list-style: none;
+  padding: 0;
+  max-width: 76ch;
+}
+.tty-list li {
+  display: grid;
+  grid-template-columns: 2.5ch 1fr;
+  margin-bottom: 0.25rem;
+}
+.tty-list li::before {
+  content: '-';
+  color: var(--ink-dim);
+}
+.tty-list[data-ordered] {
+  counter-reset: item;
+}
+.tty-list[data-ordered] li {
+  grid-template-columns: 3.5ch 1fr;
+  counter-increment: item;
+}
+.tty-list[data-ordered] li::before {
+  content: counter(item) '.';
+}
+
+.tty-kv {
+  display: grid;
+  grid-template-columns: minmax(10ch, max-content) minmax(0, 1fr);
+  gap: 0.2rem 2ch;
+  max-width: 88ch;
+}
+.tty-kv dt {
+  color: var(--ink-dim);
+  letter-spacing: 0.05em;
+  max-width: 22ch;
+}
+.tty-kv dd {
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .tty-kv {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .tty-kv dd {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.tty-quote {
+  border-left: 2px solid var(--ph-line);
+  padding-left: 2ch;
+  color: var(--ink-dim);
+  max-width: 76ch;
+}
+.tty-pre {
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--ph-soft);
+  border-left: 2px solid var(--ph-line);
+  padding: 0.6rem 2ch;
+}
+.tty-rule {
+  border: 0;
+  border-top: 1px dashed var(--ph-line);
+  margin-block: 1.5rem !important;
+}
+.tty-err {
+  color: var(--warn);
+}
+.tty-banner {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  background: var(--ph);
+  color: var(--void);
+  padding: 0.12em 0.7em 0.02em;
+}
+
+/* ls */
+.tty-ls {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26ch, 1fr));
+  gap: 0.15rem 2ch;
+}
+.tty-ls[data-long] {
+  grid-template-columns: 1fr;
+}
+.tty-ls[data-long] li {
+  display: grid;
+  grid-template-columns: minmax(0, 34ch) minmax(0, 1fr);
+  gap: 2ch;
+}
+.tty-ls__note {
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tty-ls [data-read]::before {
+  content: '✓ ';
+  color: var(--ink-dim);
+}
+@media (max-width: 640px) {
+  .tty-ls[data-long] li {
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin-bottom: 0.4rem;
+  }
+  .tty-ls__note {
+    white-space: normal;
+  }
+}
+.tty-tree {
+  list-style: none;
+  padding: 0;
+  line-height: 1.35;
+}
+.tty-tree span {
+  color: var(--ink-dim);
+  white-space: pre;
+}
+
+/* Plates: screenshots, shown through the phosphor until you ask for the colour. */
+.tty-plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24ch), 1fr));
+  gap: 1ch;
+}
+.tty-plate {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 1px solid var(--ph-line);
+  background: var(--screen);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.tty-plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+  filter: grayscale(1) contrast(1.15) brightness(0.85);
+  transition: filter 200ms ease;
+}
+.tty-plate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--ph);
+  mix-blend-mode: multiply;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.tty-plate:hover img,
+.tty-plate:focus-visible img {
+  filter: none;
+}
+.tty-plate:hover::after,
+.tty-plate:focus-visible::after {
+  opacity: 0;
+}
+.tty-video {
+  max-width: 60ch;
+}
+.tty-video video {
+  width: 100%;
+  display: block;
+  border: 1px solid var(--ph-line);
+  background: var(--screen);
+}
+.tty-video figcaption {
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+
+/* The prompt and the PF keys */
+.tty-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: var(--void);
+  border-top: 1px solid var(--ph-line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tty-options {
+  padding-top: 0.4rem;
+  color: var(--ink-dim);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2ch;
+}
+.tty-prompt {
+  display: flex;
+  gap: 1ch;
+  align-items: center;
+  padding-block: 0.6rem 0.35rem;
+}
+.tty-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+  font: inherit;
+  /* 16px floor: below it iOS zooms the page when the field takes focus. */
+  font-size: max(1rem, 16px);
+  caret-color: var(--ph);
+  caret-shape: block;
+  padding: 0;
+}
+.tty-input::placeholder {
+  color: var(--ink-dim);
+  opacity: 0.7;
+}
+.tty-pf {
+  display: flex;
+  gap: 0.5ch;
+  padding-bottom: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tty-pf button {
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  height: auto;
+  min-height: 1.9rem;
+  padding: 0.15rem 1ch;
+  color: var(--ink-dim);
+  border: 1px solid var(--ph-line);
+  border-radius: 0;
+  white-space: nowrap;
+}
+.tty-pf button b {
+  color: var(--ph);
+  font-weight: 500;
+  margin-right: 0.7ch;
+}
+.tty-pf button:hover {
+  background: var(--ph);
+  color: var(--void);
+}
+.tty-pf button:hover b {
+  color: inherit;
+}
+
+/* The glass: scanlines and a vignette over everything, touching nothing. */
+.crt {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, oklch(0 0 0 / 0.5) 100%);
+}
+:root:not([data-scanlines='off']) .crt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, oklch(0 0 0 / 0.16) 2px 3px);
+}
+
+/* shadcn dialogs, squared off and lit by the tube */
+[data-slot='dialog-overlay'] {
+  background: oklch(0.04 0.01 var(--hue) / 0.8);
+}
+[data-slot='dialog-content'] {
+  border: 1px solid var(--ph);
+  border-radius: 0;
+  box-shadow: 0 0 60px var(--ph-soft);
+  font-size: 1rem;
+}
+[data-slot='dialog-title'] {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--ph);
+}
+
+.palette-list {
+  max-height: min(50vh, 24rem);
+  overflow-y: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.palette-item {
+  display: grid;
+  grid-template-columns: minmax(0, 30ch) minmax(0, 1fr);
+  gap: 2ch;
+  width: 100%;
+  padding: 0.3rem 1ch;
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.palette-item span:last-child {
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-item[aria-selected='true'] {
+  background: var(--ph);
+  color: var(--void);
+}
+.palette-item[aria-selected='true'] span:last-child {
+  color: inherit;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
