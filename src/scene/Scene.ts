@@ -639,7 +639,13 @@ export class Scene {
       }
     }
 
-    if (this.demoOn && this.stage) this.stage.update(dt, this.beat(), this.camera, this.look);
+    if (this.demoOn && this.stage) {
+      const beat = this.beat();
+      this.stage.update(dt, beat, this.camera, this.look);
+      // With the score playing, the glow breathes with the kick. In silence it holds still:
+      // a picture pulsing to a beat nobody can hear just looks like a fault.
+      if (this.bloom) this.bloom.strength = 0.5 + (beat === null ? 0 : this.stage.kick * 0.14);
+    }
 
     // A little parallax from the pointer, eased so it never jumps.
     this.drift.lerp(this.pointer, Math.min(1, dt * 2));
