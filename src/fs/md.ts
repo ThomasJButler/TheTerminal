@@ -155,7 +155,14 @@ export function blockLines(blocks: Block[]): string[] {
       case 'tree':
         for (const r of b.rows) lines.push(`${r.prefix}${r.entry.name}`);
         break;
+      case 'menu':
+        for (const item of b.items) lines.push(`${item.key} ${item.name} ${item.note}`);
+        break;
+      case 'trace':
+        for (const row of b.rows) lines.push(`${row.key} ${row.text}`);
+        break;
       case 'rule':
+      case 'caller':
         break;
     }
   }
