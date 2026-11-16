@@ -127,8 +127,8 @@ const MAN: Record<string, { use: string; text: string }> = {
   ask: { use: 'ask <question>', text: 'Puts one question to the operator and prints the answer here. The operator answers only from the files and shows its working. For a conversation, run operator.' },
   operator: { use: 'operator', text: 'Starts the operator: an agent that answers questions about Tom from the files on this machine, runs commands for you, and can listen and talk. There is no language model in it.' },
   adventure: { use: 'adventure', text: 'Starts STANDING START, a text adventure in ten rooms about how Tom got here. Your place is saved on this device.' },
-  arcade: { use: 'arcade | play <game>', text: 'Opens the arcade. Two games written for this screen: trace and decode.' },
-  demo: { use: 'demo', text: 'Runs the demo: three.js, one colour, no models. Any key stops it.' },
+  arcade: { use: 'arcade | play <game>', text: 'Opens the arcade. Two games written for this screen, trace and decode, and the twelve in The Matrix Arcade: play matrix.' },
+  demo: { use: 'demo', text: 'Runs the demo: three minutes of film about who Tom is, what he builds and how he got here, drawn in three.js. The arrow keys skip, space pauses, Esc stops it.' },
   tour: { use: 'tour', text: 'The machine types for about a minute and shows the highlights. Any key gives you the keyboard back.' },
   mail: { use: 'mail', text: `Opens a message to ${LINKS.email}.` },
   setup: { use: 'setup', text: 'Shows the settings: phosphor, columns, rain, scanlines, sound, keyclick and voice. Each is changed with set.' },
@@ -257,7 +257,7 @@ function egg(line: string, cmd: string, args: string[], ctx: Ctx): Result | null
   return null;
 }
 
-const GAMES = ['trace', 'decode'];
+const GAMES = ['trace', 'decode', 'matrix'];
 
 export function exec(line: string, ctx: Ctx): Result {
   const trimmed = line.trim().replace(/\s+/g, ' ');
@@ -416,11 +416,10 @@ export function exec(line: string, ctx: Ctx): Result {
       if (what === 'adventure') return { out: [], effects: [{ e: 'program', program: 'adventure' }] };
       if (what && GAMES.includes(what)) return { out: [p(`Loading ${what.toUpperCase()}.`, true)], effects: [{ e: 'go', to: 'arcade', game: what }] };
       if (!what) return { out: [p('Opening the arcade.', true)], effects: [{ e: 'go', to: 'arcade' }] };
-      return done([err(`play: no game called ${what}. There is trace, decode and adventure.`)]);
+      return done([err(`play: no game called ${what}. There is trace, decode, matrix and adventure.`)]);
     }
 
     case 'demo':
-      if (!ctx.caps.scene) return done([err('The demo is drawn with WebGL, and this browser has not got it.')]);
       return { out: [p('Lights off.', true)], effects: [{ e: 'go', to: 'demo' }] };
 
     case 'tour':
