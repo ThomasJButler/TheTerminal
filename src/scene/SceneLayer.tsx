@@ -12,6 +12,10 @@ interface Props {
   initialMode: 'attract' | 'inside';
   phosphor: Phosphor;
   rain: boolean;
+  /** Whether the demo has the screen. */
+  demo: boolean;
+  /** The music's beat, for the demo to move to. */
+  beat: () => number | null;
   onReady: () => void;
   onUnavailable: () => void;
 }
@@ -21,7 +25,7 @@ interface Props {
  * so it is its own chunk and the terminal never waits for it.
  */
 export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
-  { initialMode, phosphor, rain, onReady, onUnavailable },
+  { initialMode, phosphor, rain, demo, beat, onReady, onUnavailable },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,7 +33,7 @@ export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
   const [ready, setReady] = useState(false);
   const callbacks = useRef({ onReady, onUnavailable });
   callbacks.current = { onReady, onUnavailable };
-  const initial = useRef({ initialMode, phosphor, rain });
+  const initial = useRef({ initialMode, phosphor, rain, beat });
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +45,7 @@ export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
           phosphor: initial.current.phosphor,
         });
         scene.setRain(initial.current.rain);
+        scene.setBeat(initial.current.beat);
         sceneRef.current = scene;
         setReady(true);
         callbacks.current.onReady();
@@ -55,6 +60,7 @@ export const SceneLayer = forwardRef<SceneHandle, Props>(function SceneLayer(
 
   useEffect(() => sceneRef.current?.setPhosphor(phosphor), [phosphor, ready]);
   useEffect(() => sceneRef.current?.setRain(rain), [rain, ready]);
+  useEffect(() => sceneRef.current?.setDemo(demo), [demo, ready]);
 
   useImperativeHandle(ref, () => ({
     enter: (onGlass) => sceneRef.current?.enter(onGlass) ?? (onGlass(), Promise.resolve()),
