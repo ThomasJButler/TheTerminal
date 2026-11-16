@@ -39,6 +39,12 @@ export type Block =
   | { k: 'video'; src: string; poster?: string; caption: string }
   | { k: 'ls'; entries: Listing[]; long: boolean }
   | { k: 'tree'; rows: { prefix: string; entry: Listing }[] }
+  /** The main menu. Rows are links, and the newest one answers to the arrow keys. */
+  | { k: 'menu'; items: { key: string; name: string; note: string; cmd: string; href?: string }[] }
+  /** An agent's working: the steps it took before it answered. */
+  | { k: 'trace'; rows: { key: string; text: string }[] }
+  /** Filled in by the browser: how many times this browser has called. */
+  | { k: 'caller' }
   | { k: 'err'; text: string }
   /** A status line in reverse video. */
   | { k: 'banner'; text: string };
