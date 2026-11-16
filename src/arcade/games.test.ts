@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decode, DECODE_WORDS } from './decode';
 import { TextScreen } from './engine';
-import { GAMES } from './games';
+import { projects } from '@/content/projects';
+import { GAMES, ROSTER } from './games';
 import { trace, TRACE_WORDS } from './trace';
 
 const sounds: string[] = [];
@@ -28,8 +29,15 @@ describe('the word lists', () => {
     for (const word of [...TRACE_WORDS, ...DECODE_WORDS]) expect(word).toMatch(/^[A-Z]{3,12}$/);
   });
 
+  it('the cabinet lists the same twelve games the project file shows', () => {
+    const shown = projects.find((x) => x.id === 'matrix-arcade')?.games?.map((g) => g.title);
+    expect(ROSTER.map((g) => g.title)).toEqual(shown);
+    // House rule: no en or em dashes in shipped copy.
+    for (const game of ROSTER) expect(game.note).not.toMatch(/[–—]/);
+  });
+
   it('every listed game has somewhere to be played', () => {
-    expect(GAMES.map((g) => g.id)).toEqual(['trace', 'decode']);
+    expect(GAMES.map((g) => g.id)).toEqual(['trace', 'decode', 'matrix']);
   });
 });
 
