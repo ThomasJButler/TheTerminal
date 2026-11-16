@@ -35,10 +35,7 @@ function tone(c: BaseAudioContext, out: AudioNode, t: number, { freq, dur, type 
 
 const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
 
-function noise(
-  c: BaseAudioContext, out: AudioNode, t: number,
-  { dur, gain, freq, type = 'bandpass', q = 1 }: { dur: number; gain: number; freq: number; type?: BiquadFilterType; q?: number },
-) {
+function noiseBuffer(c: BaseAudioContext): AudioBuffer {
   let buffer = noiseBuffers.get(c);
   if (!buffer) {
     buffer = c.createBuffer(1, c.sampleRate, c.sampleRate);
@@ -46,10 +43,17 @@ function noise(
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     noiseBuffers.set(c, buffer);
   }
+  return buffer;
+}
+
+function noise(
+  c: BaseAudioContext, out: AudioNode, t: number,
+  { dur, gain, freq, type = 'bandpass', q = 1 }: { dur: number; gain: number; freq: number; type?: BiquadFilterType; q?: number },
+) {
   const source = c.createBufferSource();
   const filter = c.createBiquadFilter();
   const amp = c.createGain();
-  source.buffer = buffer;
+  source.buffer = noiseBuffer(c);
   source.loop = true;
   filter.type = type;
   filter.frequency.value = freq;
@@ -117,73 +121,293 @@ export const PATCHES = {
 
 export type PatchName = keyof typeof PATCHES;
 
-/* ─── The demo's tune ───
- * Sixteen steps to a bar, four bars to a section. Two sections take turns after an intro,
- * so two minutes of demo is not four bars heard sixteen times. Notes are MIDI numbers. */
+/* ─── The demo's score ───
+ * Darksynth at 108 beats a minute, in A minor. Sixteen steps to a bar, four bars to a
+ * section. It is still nothing but oscillators and filtered noise: the pads are detuned
+ * saws, the echo is a delay line feeding itself, and the room is a burst of noise with a
+ * decay drawn on it. Notes are MIDI numbers. */
 
-const BPM = 132;
+const BPM = 108;
 const STEP = 60 / BPM / 4;
-const ARP = [0, 1, 2, 1, 0, 1, 2, 1, 0, 2, 1, 2, 0, 1, 2, 1];
-const BASS = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0];
 const X = null;
+const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
 interface Section {
   chords: number[][];
   melody: (number | null)[];
 }
 
-/** A minor, F, C, G. */
+/** A minor, F, D minor, E. The last bar is major, which keeps it uneasy. */
 const A: Section = {
-  chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]],
+  chords: [[57, 60, 64], [53, 57, 60], [50, 53, 57], [52, 56, 59]],
   melody: [
-    76, X, X, 74, X, X, 72, X, 69, X, 72, X, 74, X, 72, X,
-    77, X, X, 76, X, X, 72, X, 69, X, X, X, 65, X, 69, X,
-    76, X, X, 79, X, X, 76, X, 72, X, X, X, 67, X, 72, X,
-    74, X, X, 71, X, X, 67, X, 71, X, 74, X, 79, X, 77, X,
+    76, X, X, X, X, X, 72, X, 69, X, X, X, 72, X, 74, X,
+    77, X, X, X, X, X, 76, X, 72, X, X, X, 69, X, X, X,
+    74, X, X, X, X, X, 77, X, 81, X, X, X, 77, X, 74, X,
+    76, X, X, X, X, X, 80, X, 83, X, X, X, 80, X, 76, X,
   ],
 };
 
-/** D minor, A minor, F, E: the same key, leaning on the way home. */
+/** F, G, then A minor twice: the lift. */
 const B: Section = {
-  chords: [[50, 53, 57], [45, 48, 52], [53, 57, 60], [52, 56, 59]],
+  chords: [[53, 57, 60], [55, 59, 62], [57, 60, 64], [57, 60, 64]],
   melody: [
-    74, X, X, 77, X, X, 74, X, 72, X, 74, X, 77, X, X, X,
-    76, X, X, 72, X, X, 69, X, 72, X, X, X, 76, X, X, X,
-    77, X, X, 81, X, X, 77, X, 76, X, 77, X, 72, X, X, X,
-    76, X, X, 80, X, X, 83, X, 80, X, X, X, 76, X, 71, X,
+    81, X, X, X, X, X, 77, X, 84, X, X, X, 81, X, X, X,
+    83, X, X, X, X, X, 79, X, 86, X, X, X, 83, X, X, X,
+    88, X, X, X, 84, X, X, X, 81, X, X, X, 76, X, X, X,
+    81, X, X, X, X, X, X, X, X, X, X, X, 79, X, 76, X,
   ],
 };
 
-const FORM = [A, A, B, A, B];
-const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
-
-function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number) {
-  const cycle = Math.floor(step / 64);
-  // The first time round is the intro: arpeggio and bass, with the rest held back.
-  const intro = cycle === 0;
-  const section = intro ? A : FORM[(cycle - 1) % FORM.length];
-  const bar = Math.floor(step / 16) % 4;
-  const at = step % 16;
-  const chord = section.chords[bar];
-  tone(c, out, t, { freq: hz(chord[ARP[at]] + 12), dur: STEP * 0.9, gain: 0.05 });
-  if (BASS[at]) tone(c, out, t, { freq: hz(chord[0] - 12), dur: STEP * 1.8, type: 'triangle', gain: 0.16 });
-  if (intro) return;
-  const note = section.melody[step % 64];
-  if (note) tone(c, out, t, { freq: hz(note), dur: STEP * 2.6, type: 'triangle', gain: 0.12 });
-  if (at % 8 === 0) tone(c, out, t, { freq: 120, to: 42, dur: 0.12, type: 'sine', gain: 0.3 });
-  if (at % 4 === 2) noise(c, out, t, { dur: 0.03, gain: 0.06, freq: 6500, type: 'highpass' });
+interface Part {
+  section: Section;
+  kick: boolean;
+  snare: boolean;
+  bass: boolean;
+  lead: boolean;
 }
 
-/** One bar of the tune with everything playing, for the self-test to render offline. */
-export const tunePatch: Patch = (c, out, t) => {
-  for (let step = 0; step < 16; step++) musicStep(c, out, t + step * STEP, 64 + step);
-  return 16 * STEP;
+/** The two sections, for the test that checks every note is in key. */
+export const SECTIONS: Section[] = [A, B];
+
+/** Pads and the arpeggio on their own, opening up, before anything hits. */
+const INTRO: Part = { section: A, kick: false, snare: false, bass: false, lead: false };
+/** What comes round after the intro. The last one is the breakdown: the drums step out. */
+const FORM: Part[] = [
+  { section: A, kick: true, snare: false, bass: true, lead: false },
+  { section: A, kick: true, snare: true, bass: true, lead: true },
+  { section: B, kick: true, snare: true, bass: true, lead: true },
+  { section: A, kick: true, snare: true, bass: true, lead: true },
+  { section: B, kick: false, snare: false, bass: false, lead: true },
+];
+
+const ARP = [0, 1, 2, 1, 2, 1, 0, 1, 0, 2, 1, 2, 0, 1, 2, 1];
+/** The rolling bass: the root, with the octave thrown in. */
+const BASS = [0, 0, 12, 0, 0, 12, 0, 0, 0, 0, 12, 0, 0, 12, 0, 12];
+
+/** Where the score's voices go. Everything but the drums is pushed down by the kick. */
+interface Bus {
+  drums: AudioNode;
+  duck: GainNode;
+  echo: AudioNode;
+  space: AudioNode;
+}
+
+const buses = new WeakMap<AudioNode, Bus>();
+
+function busFor(c: BaseAudioContext, out: AudioNode): Bus {
+  const made = buses.get(out);
+  if (made) return made;
+
+  const glue = c.createDynamicsCompressor();
+  glue.threshold.value = -15;
+  glue.ratio.value = 5;
+  glue.attack.value = 0.004;
+  glue.release.value = 0.16;
+  glue.connect(out);
+
+  const drums = c.createGain();
+  drums.connect(glue);
+  const duck = c.createGain();
+  duck.connect(glue);
+
+  // The echo: three steps long, and each repeat comes back darker than the last.
+  const echo = c.createGain();
+  echo.gain.value = 0.34;
+  const delay = c.createDelay(1);
+  delay.delayTime.value = STEP * 3;
+  const darker = c.createBiquadFilter();
+  darker.type = 'lowpass';
+  darker.frequency.value = 2200;
+  const again = c.createGain();
+  again.gain.value = 0.44;
+  echo.connect(delay).connect(darker).connect(again).connect(delay);
+  darker.connect(duck);
+
+  // The room: two and a half seconds of noise, fading, which is all a reverb's impulse is.
+  const length = Math.floor(c.sampleRate * 2.5);
+  const impulse = c.createBuffer(2, length, c.sampleRate);
+  for (let channel = 0; channel < 2; channel++) {
+    const data = impulse.getChannelData(channel);
+    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3;
+  }
+  const space = c.createGain();
+  space.gain.value = 0.2;
+  const room = c.createConvolver();
+  room.buffer = impulse;
+  space.connect(room).connect(glue);
+
+  const bus = { drums, duck, echo, space };
+  buses.set(out, bus);
+  return bus;
+}
+
+interface Voice {
+  freqs: number[];
+  type: OscillatorType;
+  dur: number;
+  gain: number;
+  /** Two oscillators per note, this many cents either side. */
+  spread?: number;
+  attack?: number;
+  release?: number;
+  /** The filter opens or closes from `cutoff` to `cutoffTo` over `sweep` seconds. */
+  cutoff: number;
+  cutoffTo?: number;
+  sweep?: number;
+  q?: number;
+  /** Cents of vibrato, arriving once the note has settled. */
+  vibrato?: number;
+}
+
+function synth(c: BaseAudioContext, to: AudioNode[], t: number, v: Voice) {
+  const { attack = 0.005, release = 0.08 } = v;
+  const end = t + v.dur + release;
+  const filter = c.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.Q.value = v.q ?? 1;
+  filter.frequency.setValueAtTime(v.cutoff, t);
+  if (v.cutoffTo) filter.frequency.exponentialRampToValueAtTime(v.cutoffTo, t + (v.sweep ?? v.dur));
+  const amp = c.createGain();
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.linearRampToValueAtTime(v.gain, t + Math.min(attack, v.dur));
+  amp.gain.setValueAtTime(v.gain, t + v.dur);
+  amp.gain.exponentialRampToValueAtTime(0.0001, end);
+  filter.connect(amp);
+  for (const node of to) amp.connect(node);
+
+  let wobble: GainNode | null = null;
+  if (v.vibrato) {
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 5.4;
+    wobble = c.createGain();
+    wobble.gain.value = 0;
+    wobble.gain.setValueAtTime(0, t + 0.18);
+    wobble.gain.linearRampToValueAtTime(v.vibrato, t + 0.5);
+    lfo.connect(wobble);
+    lfo.start(t);
+    lfo.stop(end + 0.02);
+  }
+  for (const freq of v.freqs) {
+    for (const cents of v.spread ? [-v.spread, v.spread] : [0]) {
+      const osc = c.createOscillator();
+      osc.type = v.type;
+      osc.frequency.value = freq;
+      osc.detune.value = cents;
+      wobble?.connect(osc.detune);
+      osc.connect(filter);
+      osc.start(t);
+      osc.stop(end + 0.02);
+    }
+  }
+}
+
+function kick(c: BaseAudioContext, bus: Bus, t: number) {
+  tone(c, bus.drums, t, { freq: 150, to: 44, dur: 0.24, type: 'sine', gain: 0.7 });
+  noise(c, bus.drums, t, { dur: 0.012, gain: 0.22, freq: 3200, type: 'highpass' });
+  // The pump: everything else drops as the kick lands and swells back before the next.
+  bus.duck.gain.setValueAtTime(0.34, t);
+  bus.duck.gain.linearRampToValueAtTime(1, t + STEP * 3);
+}
+
+function snare(c: BaseAudioContext, bus: Bus, t: number, level = 1) {
+  noise(c, bus.drums, t, { dur: 0.19, gain: 0.4 * level, freq: 1900, q: 0.6 });
+  noise(c, bus.space, t, { dur: 0.12, gain: 0.3 * level, freq: 2600, q: 0.6 });
+  tone(c, bus.drums, t, { freq: 200, to: 150, dur: 0.09, type: 'triangle', gain: 0.24 * level });
+}
+
+/** A bar of hiss climbing into the next section. */
+function riser(c: BaseAudioContext, bus: Bus, t: number, dur: number) {
+  const source = c.createBufferSource();
+  source.buffer = noiseBuffer(c);
+  source.loop = true;
+  const filter = c.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 1.4;
+  filter.frequency.setValueAtTime(300, t);
+  filter.frequency.exponentialRampToValueAtTime(7000, t + dur);
+  const amp = c.createGain();
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.exponentialRampToValueAtTime(0.13, t + dur * 0.96);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  source.connect(filter).connect(amp);
+  amp.connect(bus.duck);
+  amp.connect(bus.space);
+  source.start(t);
+  source.stop(t + dur + 0.05);
+}
+
+function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number) {
+  const bus = busFor(c, out);
+  const cycle = Math.floor(step / 64);
+  const part = cycle === 0 ? INTRO : FORM[(cycle - 1) % FORM.length];
+  const bar = Math.floor(step / 16) % 4;
+  const at = step % 16;
+  const { chords, melody } = part.section;
+  const chord = chords[bar];
+
+  if (at === 0) {
+    synth(c, [bus.duck, bus.space], t, {
+      freqs: chord.map(hz), type: 'sawtooth', spread: 11, dur: STEP * 16, gain: 0.026,
+      attack: 0.5, release: 0.7, cutoff: 480, cutoffTo: 1150,
+    });
+  }
+
+  // The arpeggio starts muffled and opens over the intro.
+  const open = cycle === 0 ? 0.25 + 0.75 * (step / 64) : 1;
+  synth(c, [bus.duck, bus.echo], t, {
+    freqs: [hz(chord[ARP[at]] + 12)], type: 'square', dur: STEP * 0.5, gain: 0.05,
+    release: 0.12, cutoff: 3400 * open, cutoffTo: 520, q: 3,
+  });
+
+  if (part.bass) {
+    synth(c, [bus.duck], t, {
+      freqs: [hz(chord[0] - 12 + BASS[at])], type: 'sawtooth', spread: 9, dur: STEP * 0.8, gain: 0.2,
+      release: 0.05, cutoff: 1500, cutoffTo: 210, q: 7,
+    });
+  }
+
+  if (part.kick && at % 4 === 0) kick(c, bus, t);
+  if (part.snare && at % 8 === 4) snare(c, bus, t);
+  // Hats: every step, quietly, with the off-beats leaning forward and one left open.
+  const openHat = part.kick && at === 14 && bar % 2 === 1;
+  noise(c, bus.drums, t, { dur: openHat ? 0.16 : 0.03, gain: at % 4 === 2 ? 0.1 : 0.045, freq: 9000, type: 'highpass' });
+
+  if (part.lead) {
+    const note = melody[step % 64];
+    if (note) {
+      // Held until the next note in the line.
+      let hold = 1;
+      while (hold < 16 && !melody[(step + hold) % 64]) hold += 1;
+      synth(c, [bus.duck, bus.echo, bus.space], t, {
+        freqs: [hz(note)], type: 'sawtooth', spread: 14, dur: STEP * hold * 0.92, gain: 0.07,
+        attack: 0.03, release: 0.25, cutoff: 700, cutoffTo: 2800, sweep: 0.16, q: 2, vibrato: 7,
+      });
+    }
+  }
+
+  // The last bar of a section leans into the next one.
+  if (bar === 3) {
+    if (at === 0) riser(c, bus, t, STEP * 16);
+    if (part.snare && at >= 12) snare(c, bus, t, 0.55);
+  }
+}
+
+/** A stretch of the score as a patch: `steps` sixteenths, starting `from` that many in. */
+export const scorePatch = (from: number, steps: number): Patch => (c, out, t) => {
+  for (let step = 0; step < steps; step++) musicStep(c, out, t + step * STEP, from + step);
+  return steps * STEP;
 };
+
+/** One bar with everything playing, for the self-test to render offline. */
+export const tunePatch = scorePatch(64 * 3, 16);
 
 /* ─── The live context ─── */
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+/** The score has a gain of its own, so stopping it can fade the pads and the echo out. */
+let score: GainNode | null = null;
 let on = false;
 let timer = 0;
 let nextStep = 0;
@@ -199,6 +423,8 @@ function live(): AudioContext | null {
     master = ctx.createGain();
     master.gain.value = 0.55;
     master.connect(ctx.destination);
+    score = ctx.createGain();
+    score.connect(master);
   }
   // Browsers start a context suspended until a key or a click. Every caller is one.
   if (ctx.state === 'suspended') void ctx.resume();
@@ -226,8 +452,10 @@ export const sound = {
   startMusic() {
     if (!on || timer) return;
     const c = live();
-    if (!c || !master) return;
-    const out = master;
+    if (!c || !score) return;
+    const out = score;
+    out.gain.cancelScheduledValues(c.currentTime);
+    out.gain.setValueAtTime(1, c.currentTime);
     nextStep = 0;
     nextTime = c.currentTime + 0.08;
     startedAt = nextTime;
@@ -244,6 +472,10 @@ export const sound = {
     if (!timer) return;
     window.clearInterval(timer);
     timer = 0;
+    if (ctx && score) {
+      score.gain.cancelScheduledValues(ctx.currentTime);
+      score.gain.setTargetAtTime(0, ctx.currentTime, 0.07);
+    }
   },
   /** Beats since the tune started, or null when it is not playing. The demo moves to it. */
   beat(): number | null {
