@@ -118,37 +118,65 @@ export const PATCHES = {
 export type PatchName = keyof typeof PATCHES;
 
 /* ─── The demo's tune ───
- * Four bars, sixteen steps each, over A minor, F, C and G. Notes are MIDI numbers. */
+ * Sixteen steps to a bar, four bars to a section. Two sections take turns after an intro,
+ * so two minutes of demo is not four bars heard sixteen times. Notes are MIDI numbers. */
 
 const BPM = 132;
 const STEP = 60 / BPM / 4;
-const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
 const ARP = [0, 1, 2, 1, 0, 1, 2, 1, 0, 2, 1, 2, 0, 1, 2, 1];
 const BASS = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0];
 const X = null;
-const MELODY: (number | null)[] = [
-  76, X, X, 74, X, X, 72, X, 69, X, 72, X, 74, X, 72, X,
-  77, X, X, 76, X, X, 72, X, 69, X, X, X, 65, X, 69, X,
-  76, X, X, 79, X, X, 76, X, 72, X, X, X, 67, X, 72, X,
-  74, X, X, 71, X, X, 67, X, 71, X, 74, X, 79, X, 77, X,
-];
+
+interface Section {
+  chords: number[][];
+  melody: (number | null)[];
+}
+
+/** A minor, F, C, G. */
+const A: Section = {
+  chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]],
+  melody: [
+    76, X, X, 74, X, X, 72, X, 69, X, 72, X, 74, X, 72, X,
+    77, X, X, 76, X, X, 72, X, 69, X, X, X, 65, X, 69, X,
+    76, X, X, 79, X, X, 76, X, 72, X, X, X, 67, X, 72, X,
+    74, X, X, 71, X, X, 67, X, 71, X, 74, X, 79, X, 77, X,
+  ],
+};
+
+/** D minor, A minor, F, E: the same key, leaning on the way home. */
+const B: Section = {
+  chords: [[50, 53, 57], [45, 48, 52], [53, 57, 60], [52, 56, 59]],
+  melody: [
+    74, X, X, 77, X, X, 74, X, 72, X, 74, X, 77, X, X, X,
+    76, X, X, 72, X, X, 69, X, 72, X, X, X, 76, X, X, X,
+    77, X, X, 81, X, X, 77, X, 76, X, 77, X, 72, X, X, X,
+    76, X, X, 80, X, X, 83, X, 80, X, X, X, 76, X, 71, X,
+  ],
+};
+
+const FORM = [A, A, B, A, B];
 const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
 function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number) {
+  const cycle = Math.floor(step / 64);
+  // The first time round is the intro: arpeggio and bass, with the rest held back.
+  const intro = cycle === 0;
+  const section = intro ? A : FORM[(cycle - 1) % FORM.length];
   const bar = Math.floor(step / 16) % 4;
   const at = step % 16;
-  const chord = CHORDS[bar];
+  const chord = section.chords[bar];
   tone(c, out, t, { freq: hz(chord[ARP[at]] + 12), dur: STEP * 0.9, gain: 0.05 });
   if (BASS[at]) tone(c, out, t, { freq: hz(chord[0] - 12), dur: STEP * 1.8, type: 'triangle', gain: 0.16 });
-  const note = MELODY[step % MELODY.length];
+  if (intro) return;
+  const note = section.melody[step % 64];
   if (note) tone(c, out, t, { freq: hz(note), dur: STEP * 2.6, type: 'triangle', gain: 0.12 });
   if (at % 8 === 0) tone(c, out, t, { freq: 120, to: 42, dur: 0.12, type: 'sine', gain: 0.3 });
   if (at % 4 === 2) noise(c, out, t, { dur: 0.03, gain: 0.06, freq: 6500, type: 'highpass' });
 }
 
-/** Four bars of the tune, for the self-test to render offline. */
+/** One bar of the tune with everything playing, for the self-test to render offline. */
 export const tunePatch: Patch = (c, out, t) => {
-  for (let step = 0; step < 16; step++) musicStep(c, out, t + step * STEP, step);
+  for (let step = 0; step < 16; step++) musicStep(c, out, t + step * STEP, 64 + step);
   return 16 * STEP;
 };
 
