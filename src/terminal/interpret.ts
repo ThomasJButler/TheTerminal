@@ -129,8 +129,8 @@ const MODE_META: Record<string, { title: string; description: string }> = {
   '/operator': { title: `Operator | ${SITE_NAME}`, description: OPERATOR_NOTE },
   '/adventure': { title: `Standing Start | ${SITE_NAME}`, description: ADVENTURE_NOTE },
   '/tour': { title: `Tour | ${SITE_NAME}`, description: 'A minute, hands off. The machine types its way through the highlights.' },
-  '/arcade': { title: `Arcade | ${SITE_NAME}`, description: 'Two games written for a terminal screen: Trace and Decode.' },
-  '/demo': { title: `Demo | ${SITE_NAME}`, description: 'A three.js demo in one colour, with no models and no textures.' },
+  '/arcade': { title: `Arcade | ${SITE_NAME}`, description: 'Fourteen games: Trace and Decode, written for a terminal screen, and the twelve in The Matrix Arcade.' },
+  '/demo': { title: `Demo | ${SITE_NAME}`, description: 'Three minutes on who Tom Butler is and what he builds: the road into software, the projects, and the machine itself.' },
 };
 
 export function metaFor(pathname: string): { title: string; description: string } {

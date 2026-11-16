@@ -122,8 +122,8 @@ export function useMachine() {
   const stopListening = useRef<(() => void) | null>(null);
 
   // What the callbacks read, so none of them goes stale and none needs re-creating.
-  const live = useRef({ cwd, program, settings, found, adventure, caps, path, view, dialog: false });
-  live.current = { cwd, program, settings, found, adventure, caps, path, view, dialog: paletteOpen || mailOpen || zoom !== null };
+  const live = useRef({ cwd, program, settings, found, adventure, caps, path, view, menuAt, dialog: false });
+  live.current = { cwd, program, settings, found, adventure, caps, path, view, menuAt, dialog: paletteOpen || mailOpen || zoom !== null };
 
   const append = useCallback((out: Block[], as: Program = 'shell', screen = false) => {
     const entry: LiveEntry = { id: nextId.current++, cwd: live.current.cwd, program: as, links: as, cmd: null, out, screen, fresh: ++nonce.current };
@@ -523,10 +523,15 @@ export function useMachine() {
       outsideRef.current = 'yes';
       setOutside('yes');
       setSceneWanted(true);
-    } else if (gl && (!reducedMotion() || view === 'demo')) {
-      // Not needed for first paint: bring the rain in once the page has settled.
-      const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 600));
-      idle(() => setSceneWanted(true));
+    } else {
+      if (gl && !reducedMotion()) {
+        // Not needed for first paint: bring the rain in once the page has settled.
+        const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 600));
+        idle(() => setSceneWanted(true));
+      }
+      // A desk with a keyboard: put the cursor in the prompt. On a phone that would throw
+      // the keyboard up over the menu, so there it waits to be tapped.
+      if (view === 'terminal' && window.matchMedia('(pointer: fine)').matches) inputRef.current?.focus({ preventScroll: true });
     }
     if (path === '/tour') window.setTimeout(() => startTour(), 600);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -639,6 +644,21 @@ export function useMachine() {
       // Typing anywhere lands in the prompt, unless something else has a claim on the keys.
       const target = e.target as HTMLElement;
       const busy = target.closest('input, textarea, select, [role="dialog"], video');
+      // The menu answers to Enter and the arrows wherever the focus happens to be: someone
+      // who has just arrived has not clicked on anything yet.
+      if (!busy && !e.ctrlKey && st.program === 'menu' && !target.closest('a, button')) {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setMenuAt((at) => (at + (e.key === 'ArrowUp' ? MENU.length - 1 : 1)) % MENU.length);
+          sound.play('select');
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          runRef.current(MENU[st.menuAt].key);
+          return;
+        }
+      }
       if (!busy && !e.ctrlKey && (e.key.length === 1 || e.key === 'Backspace') && e.key !== ' ') {
         inputRef.current?.focus({ preventScroll: true });
       }

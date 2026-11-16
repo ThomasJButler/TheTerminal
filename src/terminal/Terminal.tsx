@@ -22,7 +22,7 @@ export function Prompt({ program, cwd }: { program: Program; cwd: string }) {
 }
 
 const PLACEHOLDER: Record<Program, string> = {
-  menu: '0-9, a name, or any command',
+  menu: 'Enter for the demo, or 0-9, or a command',
   shell: 'type help, or ls',
   operator: 'ask me something',
   adventure: 'what do you do?',

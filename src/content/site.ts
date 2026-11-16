@@ -188,12 +188,12 @@ export interface MenuItem {
 }
 
 export const MENU: MenuItem[] = [
-  { key: '1', name: 'TERMINAL', cmd: 'shell', href: '/terminal', note: "The shell. Everything I've made is a file. Go looking." },
+  { key: '1', name: 'DEMO', cmd: 'demo', href: '/demo', note: 'Start here. Three minutes, nothing to type: who I am and what I build.' },
   { key: '2', name: 'OPERATOR', cmd: 'operator', href: '/operator', note: 'Ask the machine about me. It shows its working, and it talks.' },
-  { key: '3', name: 'ARCADE', cmd: 'arcade', href: '/arcade', note: 'Two games written for this screen.' },
+  { key: '3', name: 'ARCADE', cmd: 'arcade', href: '/arcade', note: 'Fourteen games. Two are made of text.' },
   { key: '4', name: 'ADVENTURE', cmd: 'adventure', href: '/adventure', note: 'How I got here, as a text adventure. Ten rooms or so.' },
-  { key: '5', name: 'DEMO', cmd: 'demo', href: '/demo', note: 'Lights off, sound up. Three.js, one colour, no models.' },
-  { key: '6', name: 'TOUR', cmd: 'tour', href: '/tour', note: 'A minute, hands off. The machine does the typing.' },
+  { key: '5', name: 'TOUR', cmd: 'tour', href: '/tour', note: 'The shell, driven for you. The machine does the typing.' },
+  { key: '6', name: 'TERMINAL', cmd: 'shell', href: '/terminal', note: "The shell. Everything I've made is a file. Go looking." },
   { key: '7', name: 'WHAT I BUILD', cmd: 'cat ~/build.txt', href: '/build', note: 'The list, with something to check for each line.' },
   { key: '8', name: 'MAIL', cmd: 'mail', note: 'Write to me.' },
   { key: '9', name: 'SET-UP', cmd: 'setup', note: 'Phosphor, columns, sound, voice.' },
@@ -226,7 +226,7 @@ export const BUILD: { title: string; body: string }[] = [
   },
   {
     title: 'Games',
-    body: 'The Matrix Arcade is twelve games behind one cabinet: `projects/matrix-arcade.md`. Two more were written for this screen: [arcade](<cmd:arcade>).',
+    body: 'The Matrix Arcade is twelve games behind one cabinet: `projects/matrix-arcade.md`. It is wired into this machine, next to two more that were written for this screen: [arcade](<cmd:arcade>).',
   },
   {
     title: 'Websites',
@@ -234,7 +234,7 @@ export const BUILD: { title: string; body: string }[] = [
   },
   {
     title: 'Experiences',
-    body: "You're in one. There's also [adventure](<cmd:adventure>), which is how I got here in about ten rooms, and [demo](<cmd:demo>).",
+    body: "You're in one. There's also [demo](<cmd:demo>), which is three minutes of film about me, and [adventure](<cmd:adventure>), which is how I got here in about ten rooms.",
   },
   {
     title: 'Design',
