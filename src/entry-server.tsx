@@ -1,8 +1,9 @@
 import { StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { StaticRouter } from 'react-router';
-import { App, titleFor } from './App';
-import { ALL_NODES, nodeForUrl, urlFor } from './fs/tree';
+import { App } from './App';
+import { ALL_NODES, urlFor } from './fs/tree';
+import { MODE_ROUTES, metaFor } from './terminal/interpret';
 
 /**
  * The prerender's entry. It must not import main.tsx, which carries CSS side-effect imports
@@ -18,20 +19,12 @@ export function render(url: string): string {
   );
 }
 
-/** Every page there is: one per file and one per directory. */
+/** Every page there is: one per program, one per file and one per directory. */
 export function routes(): { path: string; title: string; description: string }[] {
-  const seen = new Set<string>();
-  const out: { path: string; title: string; description: string }[] = [];
-  for (const node of ALL_NODES) {
-    const path = urlFor(node);
-    if (seen.has(path)) continue;
-    seen.add(path);
-    const shown = nodeForUrl(path) ?? node;
-    out.push({ path, title: titleFor(path), description: shown.note });
-  }
-  return out;
+  const paths = [...new Set([...MODE_ROUTES, ...ALL_NODES.map(urlFor)])];
+  return paths.map((path) => ({ path, ...metaFor(path) }));
 }
 
 export function notFound(): { html: string; title: string } {
-  return { html: render('/__not-found__'), title: titleFor('/__not-found__') };
+  return { html: render('/__not-found__'), title: metaFor('/__not-found__').title };
 }

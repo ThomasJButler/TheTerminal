@@ -146,6 +146,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding: 0 1rem 5vh;
   cursor: pointer;
   transition: opacity 500ms ease;
@@ -154,32 +155,56 @@
   opacity: 0;
   pointer-events: none;
 }
-.intro__key {
+.intro__ask {
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2.4vw, 1.6rem);
   letter-spacing: 0.16em;
   color: var(--ph);
-  background: none;
-  border: 0;
-  padding: 0.4em 0.8em;
-  cursor: pointer;
   text-shadow: 0 0 18px var(--ph-line);
 }
-.intro__key::after {
+.intro__ask::after {
   content: '█';
   margin-left: 0.3em;
   animation: blink 1.06s steps(1) infinite;
 }
+.intro__keys {
+  display: flex;
+  gap: 1ch;
+}
+.intro__keys button {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--ph);
+  background: oklch(0.07 0.012 var(--hue) / 0.7);
+  border: 1px solid var(--ph-line);
+  padding: 0.35em 1.1em 0.25em;
+  min-width: 5.5ch;
+  cursor: pointer;
+}
+.intro__keys button b {
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.intro__keys button:hover,
+.intro__keys button:focus-visible {
+  background: var(--ph);
+  color: var(--void);
+}
 .intro__hint {
-  margin: 0.6rem 0 0;
+  margin: 0.2rem 0 0;
   font-size: 0.8rem;
   color: var(--ink-dim);
   letter-spacing: 0.08em;
+  text-align: center;
 }
 
-/* ─── The terminal ─── */
+/* ─── The screen: the terminal, the arcade and the demo all sit in this ─── */
 
-.tty {
+.screen {
   position: relative;
   z-index: 10;
   min-height: 100dvh;
@@ -196,7 +221,7 @@
   transition: opacity 600ms ease;
 }
 /* Set before first paint by the inline script in index.html, on a cold visit to '/'. */
-html[data-boot='intro'] .tty {
+html[data-boot='intro'] .screen {
   opacity: 0;
   pointer-events: none;
 }
@@ -253,6 +278,32 @@ html[data-boot='intro'] .tty {
   color: var(--ph);
   font-variant-numeric: tabular-nums;
 }
+.tty-status__sound {
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--ink-dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.tty-status__sound[aria-pressed='true'] {
+  color: var(--ph);
+}
+.tty-status__sound:hover {
+  color: var(--void);
+  background: var(--ph);
+}
+.tty-status__clock {
+  font-variant-numeric: tabular-nums;
+  min-width: 5ch;
+  text-align: right;
+}
+@media (max-width: 520px) {
+  .tty-status__clock {
+    display: none;
+  }
+}
 
 .tty-main {
   flex: 1;
@@ -289,10 +340,14 @@ html[data-boot='intro'] .tty {
 .tty-out > *:last-child {
   margin-bottom: 0;
 }
-/* Fresh output arrives a block at a time, the way a slow line would deliver it. */
-.tty-entry[data-fresh] .tty-out > * {
-  animation: arrive 90ms steps(2) both;
-  animation-delay: calc(min(var(--i), 28) * 26ms);
+/* A program's opening screen gets the whole screen: there is always room to scroll it to
+   the top, the way a BBS cleared before it drew a menu. */
+.tty-entry[data-screen]:last-child {
+  min-height: calc(100dvh - 10.5rem);
+}
+/* Held back until the lines before it have printed. */
+.tty-entry[data-wait] {
+  visibility: hidden;
 }
 
 .tty-h1,
@@ -304,7 +359,7 @@ html[data-boot='intro'] .tty {
   text-wrap: balance;
 }
 .tty-h1 {
-  font-size: clamp(2.2rem, 5.2vw, 3.3rem);
+  font-size: clamp(2.2rem, 5.2vw, 3.1rem);
   letter-spacing: 0.02em;
   text-shadow: 0 0 22px var(--ph-line);
   padding-top: 0.25rem;
@@ -554,6 +609,249 @@ html[data-boot='intro'] .tty {
   margin-top: 0.4rem;
 }
 
+/* The main menu. Rows are links; the live one answers to the arrow keys in reverse video. */
+.tty-menu {
+  list-style: none;
+  padding: 0;
+  max-width: 88ch;
+}
+.tty-menu li > * {
+  display: grid;
+  grid-template-columns: 3ch 15ch minmax(0, 1fr);
+  width: 100%;
+  padding: 0.08rem 0.5ch;
+  margin-inline: -0.5ch;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.tty-menu__key,
+.tty-menu__name {
+  color: var(--ph);
+}
+.tty-menu__name {
+  letter-spacing: 0.06em;
+}
+.tty-menu__note {
+  color: var(--ink-dim);
+}
+.tty-menu li[data-active] > *,
+.tty-menu li > *:hover,
+.tty-menu li > *:focus-visible {
+  background: var(--ph);
+  color: var(--void);
+  outline: none;
+}
+.tty-menu li[data-active] span,
+.tty-menu li > *:hover span,
+.tty-menu li > *:focus-visible span {
+  color: inherit;
+}
+@media (max-width: 640px) {
+  .tty-menu li > * {
+    grid-template-columns: 3ch minmax(0, 1fr);
+    padding-block: 0.4rem;
+  }
+  .tty-menu__note {
+    grid-column: 2;
+  }
+}
+
+/* An agent showing its working: smaller, dimmer, and set apart from the answer. */
+.tty-trace {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0 2ch;
+  font-size: 0.86rem;
+  color: var(--ink-dim);
+  border-left: 2px solid var(--ph-line);
+  padding-left: 2ch;
+  max-width: 88ch;
+}
+.tty-trace dt::before {
+  content: '▸ ';
+}
+.tty-trace dt {
+  letter-spacing: 0.06em;
+}
+.tty-trace dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tty-caller {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.2rem 3ch;
+  color: var(--ink-dim);
+  font-size: 0.86rem;
+  border-top: 1px dashed var(--ph-line);
+  padding-top: 0.6rem;
+  max-width: 88ch;
+}
+.tty-notice {
+  color: var(--ph);
+  letter-spacing: 0.08em;
+  font-size: 0.86rem;
+}
+
+/* ─── Full-screen programs: the arcade and the demo ─── */
+
+.app-main {
+  flex: 1;
+  padding-block: 1.25rem 2rem;
+}
+.tty-pf--only {
+  padding-top: 0.55rem;
+  align-items: center;
+}
+
+.arcade {
+  display: flex;
+  flex-direction: column;
+  padding-block: 0.7rem 0;
+  /* The game gets whatever the status line and the keys leave. */
+  height: calc(100dvh - 5.6rem);
+  min-height: 20rem;
+}
+.arcade__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 2ch;
+  font-size: 0.86rem;
+}
+.arcade__head h1 {
+  margin: 0;
+  font-weight: 400;
+}
+.arcade__head p {
+  margin: 0;
+  flex: 1;
+  min-width: 24ch;
+}
+.arcade__screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: 0.6rem;
+  background: oklch(0.07 0.012 var(--hue) / 0.9);
+  border-block: 1px solid var(--ph-line);
+}
+/* Pinned to its box. A canvas sized in percentages keeps its own 2:1 shape instead, which
+   on a phone left the game playing in the top third of the screen. */
+.arcade__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.arcade__pad {
+  display: none;
+  gap: 0.5ch;
+}
+@media (pointer: coarse) {
+  .arcade__pad {
+    display: flex;
+  }
+  .arcade__pad button {
+    min-width: 2.8rem;
+    min-height: 2.6rem !important;
+    font-size: 1.1rem !important;
+  }
+}
+.arcade__best {
+  margin-left: auto;
+  color: var(--ph);
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.arcade__type {
+  display: none;
+  width: 100%;
+  margin-top: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--ph-line);
+  color: var(--ink);
+  font: inherit;
+  font-size: max(1rem, 16px);
+  padding: 0.4rem 1ch;
+}
+@media (pointer: coarse) {
+  .arcade__type {
+    display: block;
+  }
+}
+
+/* The demo: the scene is the picture, so the wash that keeps text readable comes off. */
+.screen[data-view='demo'] {
+  background: none;
+}
+.screen[data-view='demo'] .tty-status {
+  background: transparent;
+  border-color: transparent;
+}
+.demo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: calc(100dvh - 3rem);
+  padding: 0.6rem 0 0;
+}
+.demo__top {
+  padding-inline: 1.25rem;
+}
+.demo__top h1 {
+  margin: 0 0 0.4rem;
+  font-weight: 400;
+}
+.demo__top p {
+  margin: 0;
+  font-size: 0.86rem;
+}
+.demo__note {
+  align-self: center;
+  max-width: 56ch;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  background: oklch(0.07 0.012 var(--hue) / 0.9);
+  border: 1px solid var(--ph-line);
+}
+.demo__scroller {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4.4vw, 3rem);
+  letter-spacing: 0.08em;
+  color: var(--ph);
+  text-shadow: 0 0 20px var(--ph-line);
+  border-block: 1px solid var(--ph-line);
+  background: oklch(0.07 0.012 var(--hue) / 0.55);
+}
+.demo__scroller span {
+  display: inline-block;
+  padding-block: 0.15em 0.05em;
+  /* The text is doubled, so sliding half its width brings it back to where it began. */
+  animation: scroll-left 46s linear infinite;
+}
+.demo__keys {
+  margin: 0;
+  padding: 0.6rem 1.25rem 0.9rem;
+  text-align: center;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
 /* The prompt and the PF keys */
 .tty-foot {
   position: sticky;
@@ -699,9 +997,19 @@ html[data-boot='intro'] .tty {
     opacity: 0;
   }
 }
-@keyframes arrive {
+/* Fresh output prints down the screen. Terminal.tsx sets the duration and the number of
+   steps from how many lines there are, so it advances a line at a time. */
+@keyframes print {
   from {
-    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes scroll-left {
+  to {
+    transform: translateX(-50%);
   }
 }
 
@@ -720,5 +1028,25 @@ html[data-boot='intro'] .tty {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* A short screen: close the gaps, so the whole main menu sits above the prompt on a
+   1366 by 768 laptop without scrolling. */
+@media (max-height: 820px) and (min-width: 641px) {
+  .tty-main {
+    padding-block: 0.7rem 1rem;
+  }
+  .tty-entry {
+    margin-bottom: 0.9rem;
+  }
+  .tty-out > * {
+    margin-bottom: 0.5rem;
+  }
+  .tty-h1 {
+    font-size: 2.6rem;
+  }
+  .tty-caller {
+    padding-top: 0.4rem;
   }
 }
