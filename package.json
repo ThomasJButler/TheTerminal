@@ -6,7 +6,7 @@
   "description": "Tom Butler's site as a VT100-style terminal: one machine, a filesystem of everything, and you have to go looking.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && node scripts/prerender.mjs",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && bun scripts/prerender.mjs",
     "preview": "vite preview --outDir dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
