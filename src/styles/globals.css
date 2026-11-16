@@ -799,57 +799,255 @@ html[data-boot='intro'] .screen {
   border-color: transparent;
 }
 .demo {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: calc(100dvh - 3rem);
-  padding: 0.6rem 0 0;
-}
-.demo__top {
-  padding-inline: 1.25rem;
-}
-.demo__top h1 {
-  margin: 0 0 0.4rem;
-  font-weight: 400;
-}
-.demo__top p {
-  margin: 0;
-  font-size: 0.86rem;
+  padding-block: 1.25rem 2rem;
 }
 .demo__note {
-  align-self: center;
-  max-width: 56ch;
-  margin: 0;
-  padding: 1rem 1.25rem;
-  background: oklch(0.07 0.012 var(--hue) / 0.9);
-  border: 1px solid var(--ph-line);
-}
-.demo__scroller {
-  margin: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 4.4vw, 3rem);
-  letter-spacing: 0.08em;
-  color: var(--ph);
-  text-shadow: 0 0 20px var(--ph-line);
-  border-block: 1px solid var(--ph-line);
-  background: oklch(0.07 0.012 var(--hue) / 0.55);
-}
-.demo__scroller span {
-  display: inline-block;
-  padding-block: 0.15em 0.05em;
-  /* The text is doubled, so sliding half its width brings it back to where it began. */
-  animation: scroll-left 46s linear infinite;
-}
-.demo__keys {
-  margin: 0;
-  padding: 0.6rem 1.25rem 0.9rem;
-  text-align: center;
-  font-size: 0.86rem;
-  letter-spacing: 0.06em;
+  margin: 0 auto 1.5rem;
   color: var(--ink-dim);
+}
+
+/* As a page: every shot, one after another. */
+.reel {
+  width: min(100%, calc(var(--cols) * 0.6rem + 2.5rem));
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+.reel-shot {
+  margin-bottom: 2.6rem;
+  max-width: 76ch;
+}
+.reel-kicker {
+  margin: 0 0 0.4rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+.reel-title {
+  margin: 0 0 0.8rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 4.6vw, 3rem);
+  line-height: 1;
+  color: var(--ph);
+  text-wrap: balance;
+}
+.reel-image {
+  display: block;
+  width: min(100%, 26rem);
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  margin: 0 0 0.9rem;
+  border: 1px solid var(--ph-line);
+  background: var(--screen);
+}
+.reel-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reel-lines li {
+  margin-bottom: 0.5rem;
+  text-wrap: pretty;
+}
+.reel-lines li:nth-child(n + 2) {
+  color: var(--ink-dim);
+}
+.reel-lines[data-many] li {
+  color: var(--ink);
+  margin-bottom: 0.15rem;
+}
+.reel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 3ch;
+  margin: 1rem 0 0;
+  letter-spacing: 0.06em;
+}
+
+/* As a film: one shot at a time, low on the left like a caption, over the scene. The wash
+   that keeps a page of text readable comes off, because here the scene is the picture. */
+.screen[data-view='demo']:has(.demo[data-running]) {
+  background: none;
+}
+.screen[data-view='demo']:has(.demo[data-running]) .tty-status {
+  background: transparent;
+  border-color: transparent;
+}
+.demo[data-running] {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: calc(100dvh - 3rem);
+  padding: 0;
+}
+.demo[data-running] .reel {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.demo[data-running] .reel-shot {
+  margin: 0;
+  max-width: none;
+  padding: 3rem clamp(1.25rem, 5vw, 5rem) 1.6rem;
+  /* Dark behind the words and clear to the right, so the scene still reads. */
+  background: linear-gradient(to top, oklch(0.07 0.012 var(--hue) / 0.92) 55%, transparent);
+}
+.demo[data-running] .reel-shot > * {
+  max-width: 64ch;
+}
+.demo[data-running] .reel-title {
+  font-size: clamp(2.4rem, 6vw, 4.6rem);
+  text-shadow: 0 0 26px var(--ph-line);
+}
+.demo[data-running] .reel-lines {
+  font-size: 1.12rem;
+}
+.demo[data-running] .reel-lines[data-many] {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3.2vw, 2.3rem);
+  line-height: 1.12;
+  letter-spacing: 0.04em;
+  columns: 2;
+  column-gap: 4ch;
+  max-width: 44ch;
+}
+.demo[data-running] .reel-lines[data-many][data-many] li {
+  color: var(--ph);
+  break-inside: avoid;
+}
+.demo[data-running] .reel-image {
+  width: min(100%, 22rem);
+  max-height: 30vh;
+}
+/* Each line arrives in turn. The kicker and title come first, the rest a step apart. */
+.demo[data-running] .reel-kicker,
+.demo[data-running] .reel-title,
+.demo[data-running] .reel-image {
+  animation: rise 500ms ease-out both;
+}
+.demo[data-running] .reel-title {
+  animation-delay: 120ms;
+}
+.demo[data-running] .reel-image {
+  animation-delay: 260ms;
+}
+.demo[data-running] .reel-lines li,
+.demo[data-running] .reel-actions {
+  animation: rise 500ms ease-out both;
+  animation-delay: calc(500ms + var(--i) * var(--step));
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+
+.reel-bar {
+  padding: 0 clamp(1.25rem, 5vw, 5rem) 0.2rem;
+  background: oklch(0.07 0.012 var(--hue) / 0.92);
+}
+.reel-progress {
+  display: flex;
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reel-progress li {
+  flex: 1 1 0;
+  min-width: 4px;
+}
+.reel-progress button {
+  display: block;
+  width: 100%;
+  height: 1.1rem;
+  padding: 0.45rem 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.reel-progress button::before,
+.reel-progress span {
+  display: block;
+  height: 3px;
+}
+.reel-progress button {
+  position: relative;
+}
+.reel-progress button::before {
+  content: '';
+  background: var(--ph-line);
+}
+.reel-progress span {
+  position: absolute;
+  left: 0;
+  top: 0.45rem;
+  background: var(--ph);
+}
+.reel-progress button:hover::before {
+  background: var(--ph);
+}
+
+/* On a phone the keys' names are no use and the room is: drop them, keep the words. */
+@media (max-width: 560px) {
+  .reel-bar .tty-pf button b,
+  .reel-count {
+    display: none;
+  }
+}
+
+/* The Matrix Arcade's twelve games, as a roster. */
+.tty-roster {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24ch), 1fr));
+  gap: 1.2rem 2ch;
+}
+.tty-roster li {
+  display: grid;
+  gap: 0.15rem;
+  align-content: start;
+}
+.tty-roster .tty-plate {
+  margin-bottom: 0.3rem;
+}
+.tty-roster__title {
+  color: var(--ph);
+  letter-spacing: 0.04em;
+}
+.tty-roster__kind {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.tty-roster__note {
+  color: var(--ink-dim);
+  font-size: 0.92rem;
+}
+.arcade__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+.arcade__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+.arcade__out {
+  margin-left: auto;
+  font-size: 0.86rem;
 }
 
 /* The prompt and the PF keys */
