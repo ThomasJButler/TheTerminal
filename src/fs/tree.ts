@@ -3,8 +3,8 @@ import { timelineData } from '@/content/timeline';
 import { versions } from '@/content/versions';
 import { CASE_STUDY } from '@/content/case-study';
 import {
-  BEFORE, BIO, BLOG_META, CERTS, CLIENTS, FUELIUS, INDEPENDENT, INTERESTS, LINKS, LOCATION,
-  MACHINE, NOW, ROLE, SKILL_DEPTH, TAGLINE, USE_NOW, USE_NOW_ALSO, WHY, WORKED_WITH,
+  BEFORE, BIO, BLOG_META, BUILD, CERTS, CLIENTS, FUELIUS, INDEPENDENT, INTERESTS, LINKS, LOCATION,
+  MACHINE, NOW, ROLE, SKILL_DEPTH, USE_NOW, USE_NOW_ALSO, WHY, WORKED_WITH,
 } from '@/content/site';
 import { inl, mdBlocks, p } from './md';
 import type { Block, DirNode, FileNode, FsNode, Inline } from './types';
@@ -267,16 +267,22 @@ function build(): DirNode {
   const fileCount = () => walk(root).filter((n) => n.kind === 'file').length;
 
   root.children = [
-    file('~', 'README.txt', 'Tom Butler', `${ROLE}. A terminal with everything in it, if you go looking.`, () => [
-      h1("Hey, I'm Tom."),
+    file('~', 'README.txt', 'Terminal', 'the shell: how to get around', () => [
+      h1('The shell'),
       p(`${ROLE}. ${LOCATION}.`),
-      p(TAGLINE, true),
-      p(`This is the ${MACHINE}. It holds ${fileCount()} files: every project, the paid work, the whole road here, and some things that are not listed. Nothing is laid out for you. You have to go looking.`),
+      p(`This is the shell on the ${MACHINE}. It holds ${fileCount()} files: every project, the paid work, the whole road here, and some things that are not listed. Nothing is laid out for you. You have to go looking.`),
       { k: 'list', items: [
         inl('[ls](<cmd:ls>) lists what is here. [cd projects](<cmd:cd projects>) goes somewhere.'),
         inl('[cat about.txt](<cmd:cat about.txt>) reads a file. So does clicking one.'),
         inl('[help](<cmd:help>) is the short manual. It does not list everything.'),
+        inl('[menu](<cmd:menu>) goes back to the main menu.'),
       ] },
+    ]),
+    file('~', 'build.txt', 'What I build', 'eight kinds of thing, and where to check each', () => [
+      h1('What I build'),
+      p('Apps, games, websites, experiences, design, AI agents, voice agents and custom tooling. Eight kinds of thing, and for each one there is something you can open and check, on this machine or out in the world.'),
+      ...BUILD.flatMap((b): Block[] => [h2(b.title), p(b.body)]),
+      p('If you want one of them built, in a job or as a piece of work: [mail](<cmd:mail>).'),
     ]),
     file('~', 'about.txt', 'About', 'who, and how I got here', () => [
       h1('About'),
@@ -321,12 +327,14 @@ function build(): DirNode {
       p(`The ${MACHINE} is a nod to the DEC VT100 of 1978: an 80 by 24 character screen, a detachable keyboard, a 132 column mode, and a SET-UP key. It is not a replica. The case is drawn from a few boxes.`),
       { k: 'kv', rows: [
         { key: 'SCENE', inl: text('three.js. One shader for the rain, edge lines for the case.') },
+        { key: 'SOUND', inl: text('Web Audio, synthesised. The keyclick, the bell, the modem and the tune are all oscillators: there is not an audio file on the machine.') },
+        { key: 'VOICE', inl: text("The browser's own speech synthesis and recognition. No service, no key.") },
         { key: 'TERMINAL', inl: text('React 19 and TypeScript. The text is real text, not a canvas.') },
         { key: 'PARTS', inl: text('shadcn components on Base UI, Tailwind 4.') },
         { key: 'TYPE', inl: text('IBM Plex Mono for reading, VT323 for the double-height lines.') },
         { key: 'BUILD', inl: text('Vite. Every file is prerendered to HTML, so crawlers and screen readers get words.') },
       ] },
-      p('Things a VT100 could do that this can too: [set cols 132](<cmd:set cols 132>), [setup](<cmd:setup>).'),
+      p('Things a VT100 could do that this can too: [set cols 132](<cmd:set cols 132>), [setup](<cmd:setup>), [selftest](<cmd:selftest>), [bell](<cmd:bell>).'),
     ], true),
     file('~', '.rabbit', 'The white rabbit', 'you followed it', () => [
       h1('Knock, knock.'),
@@ -391,15 +399,19 @@ export function resolve(cwd: string, input: string): FsNode | undefined {
 }
 
 /* ─── URLs ───
- * '~/projects/sanctuary.md' is served at '/projects/sanctuary'. Dotfiles keep their dot. */
+ * '~/projects/sanctuary.md' is served at '/projects/sanctuary'. Dotfiles keep their dot.
+ * '/' is the main menu, so home and its README live at '/terminal'. */
+
+export const SHELL_URL = '/terminal';
 
 export function urlFor(node: FsNode): string {
-  if (node.path === '~' || node.path === '~/README.txt') return '/';
+  if (node.path === '~' || node.path === '~/README.txt') return SHELL_URL;
   return node.path.slice(1).replace(/\.(txt|md|log)$/, '');
 }
 
 export function nodeForUrl(pathname: string): FsNode | undefined {
   const clean = decodeURIComponent(pathname).replace(/\/+$/, '').replace(/\.html$/, '');
-  if (clean === '' || clean === '/index') return getNode('~/README.txt');
+  if (clean === SHELL_URL || clean === '/readme') return getNode('~/README.txt');
+  if (clean === '') return undefined;
   return resolve('~', clean);
 }

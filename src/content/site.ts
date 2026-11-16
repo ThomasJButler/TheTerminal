@@ -168,3 +168,88 @@ export const BLOG_META: Record<string, { title: string; excerpt: string; date: s
   'tech-burnout-crisis': { title: 'The Tech Burnout Crisis', excerpt: 'Understanding and addressing developer burnout in the AI age', date: '2024-10-08', tags: ['Mental Health', 'Developer Wellness'] },
   'the-personalization-revolution': { title: 'The Personalisation Revolution', excerpt: 'How personalised AI will transform development', date: '2025-10-15', tags: ['AI', 'Personalisation', 'Future Tech'] },
 };
+
+/* ─── The main menu ───
+ * The first two lines are the personal site's hero, word for word. */
+
+export const HERO = ["Hey, I'm Tom.", 'I build things.'];
+
+export const HERO_SUB =
+  "Apps, games, websites, experiences, design, AI agents, voice agents and custom tooling. Don't take my word for it: this machine is all of them at once. Pick one.";
+
+export interface MenuItem {
+  key: string;
+  name: string;
+  note: string;
+  /** What typing the key or the name runs. */
+  cmd: string;
+  /** The page this item has, so the menu is real links before any script runs. */
+  href?: string;
+}
+
+export const MENU: MenuItem[] = [
+  { key: '1', name: 'TERMINAL', cmd: 'shell', href: '/terminal', note: "The shell. Everything I've made is a file. Go looking." },
+  { key: '2', name: 'OPERATOR', cmd: 'operator', href: '/operator', note: 'Ask the machine about me. It shows its working, and it talks.' },
+  { key: '3', name: 'ARCADE', cmd: 'arcade', href: '/arcade', note: 'Two games written for this screen.' },
+  { key: '4', name: 'ADVENTURE', cmd: 'adventure', href: '/adventure', note: 'How I got here, as a text adventure. Ten rooms or so.' },
+  { key: '5', name: 'DEMO', cmd: 'demo', href: '/demo', note: 'Lights off, sound up. Three.js, one colour, no models.' },
+  { key: '6', name: 'TOUR', cmd: 'tour', href: '/tour', note: 'A minute, hands off. The machine does the typing.' },
+  { key: '7', name: 'WHAT I BUILD', cmd: 'cat ~/build.txt', href: '/build', note: 'The list, with something to check for each line.' },
+  { key: '8', name: 'MAIL', cmd: 'mail', note: 'Write to me.' },
+  { key: '9', name: 'SET-UP', cmd: 'setup', note: 'Phosphor, columns, sound, voice.' },
+  { key: '0', name: 'STEP BACK', cmd: 'stepback', note: 'Look at the machine from the outside.' },
+];
+
+/**
+ * `fortune`. Every line is a sentence Tom wrote, lifted whole from the copy above or from a
+ * project file. A test checks each one still appears somewhere on the machine, so this
+ * cannot drift into things he never said.
+ */
+export const FORTUNES: string[] = [
+  'I think software should give people time back, not take it from them.',
+  'Degree or no degree. Genius or not.',
+  "So what I'm building is the habit, not the finished article.",
+  'The agency taught me fundamentals and to question everything.',
+  'Nothing leaves the phone, which is the whole design rather than a feature.',
+  "Which means if you stop learning, you don't hold your position.",
+  'Software is humbling about them.',
+];
+
+/* ─── ~/build.txt: what I build, and where to check ───
+ * Each line points at something that exists: a file on this machine, or a program you can
+ * run on it. Nothing here claims a client, a price or a result that is not in the files. */
+
+export const BUILD: { title: string; body: string }[] = [
+  {
+    title: 'Apps',
+    body: 'Sanctuary is native iOS, Swift and SwiftData, fully on-device: `projects/sanctuary.md`. ModelViz is a web app for comparing AI models across four providers: `projects/modelviz.md`.',
+  },
+  {
+    title: 'Games',
+    body: 'The Matrix Arcade is twelve games behind one cabinet: `projects/matrix-arcade.md`. Two more were written for this screen: [arcade](<cmd:arcade>).',
+  },
+  {
+    title: 'Websites',
+    body: 'Client sites for twelve named clients at a HubSpot and Umbraco agency: `work/clients.txt`. And every version of my own site, all still running: `versions/history.txt`.',
+  },
+  {
+    title: 'Experiences',
+    body: "You're in one. There's also [adventure](<cmd:adventure>), which is how I got here in about ten rooms, and [demo](<cmd:demo>).",
+  },
+  {
+    title: 'Design',
+    body: 'An interactive CSS reference with 30+ pages of live demos: `projects/css-showcase.md`. This machine is one hue and two typefaces, and [setup](<cmd:setup>) changes the hue.',
+  },
+  {
+    title: 'AI agents',
+    body: 'The ISQ Agent drafts security questionnaires, cites its sources and flags what a human should check: `projects/isq-agent.md`. ReviewBot Protocol reviews pull requests: `projects/reviewbot-protocol.md`. The [operator](<cmd:operator>) on this machine is the same idea with the model taken out.',
+  },
+  {
+    title: 'Voice agents',
+    body: 'The [operator](<cmd:operator>) listens and talks back: start it, then TALK. Sanctuary uses on-device speech: `skills/depth.txt`.',
+  },
+  {
+    title: 'Custom tooling',
+    body: 'OctopusJobHunter searches sixteen job boards and writes a tailored CV in four formats: `projects/octopus-job-hunter.md`. The Offshore Property Map is a pipeline that can prove how often it is wrong: `projects/offshore-property-map.md`. And the interpreter you are typing into.',
+  },
+];
