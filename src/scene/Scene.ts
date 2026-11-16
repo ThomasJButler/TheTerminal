@@ -86,6 +86,41 @@ const RAIN_FRAG = /* glsl */ `
   }
 `;
 
+/**
+ * The demo's landscape: a flat grid of lines, lifted into hills in the vertex shader. The
+ * grid slides one cell towards the camera and snaps back, while the hills are sampled from
+ * where each line would be if it had kept going, so it reads as flying over ground that
+ * never ends. The middle is left flat, as a road.
+ */
+const TERRAIN_VERT = /* glsl */ `
+  uniform float uTime;
+  uniform float uCell;
+  varying float vFog;
+
+  float height(vec2 p) {
+    float hills = smoothstep(3.0, 12.0, abs(p.x));
+    return hills * (sin(p.x * 0.31) * 1.3 + sin(p.y * 0.23 + p.x * 0.13) * 1.9 + sin(p.y * 0.61) * 0.6 + 1.2);
+  }
+
+  void main() {
+    float travelled = uTime * 7.0;
+    vec3 pos = position;
+    pos.z += mod(travelled, uCell);
+    pos.y = height(vec2(pos.x, pos.z - travelled));
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    vFog = smoothstep(86.0, 10.0, -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const TERRAIN_FRAG = /* glsl */ `
+  uniform vec3 uColor;
+  varying float vFog;
+  void main() {
+    gl_FragColor = vec4(uColor * vFog * 0.8, 1.0);
+  }
+`;
+
 function glyphAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 512;
@@ -161,6 +196,14 @@ export class Scene {
   private cursorTimer = 0;
   private cursorOn = true;
   private disposed = false;
+
+  private demo: THREE.Group | null = null;
+  private demoOn = false;
+  private demoTime = 0;
+  private terrain: THREE.ShaderMaterial | null = null;
+  private stars: THREE.PointsMaterial | null = null;
+  private solids: THREE.Object3D[] = [];
+  private beat: () => number | null = () => null;
 
   constructor(private canvas: HTMLCanvasElement, opts: { mode: 'attract' | 'inside'; phosphor: Phosphor }) {
     this.mode = opts.mode;
@@ -411,7 +454,7 @@ export class Scene {
     ctx.shadowBlur = 10;
     ctx.textBaseline = 'top';
     ctx.font = '50px VT323, ui-monospace, monospace';
-    const lines = ['TJB-100', '', 'Wake up...', '', 'Everything is in here.', 'You have to go looking.', '', `PRESS ANY KEY ${this.cursorOn ? '█' : ''}`];
+    const lines = ['TJB-100', '', 'Wake up...', '', 'Everything is in here.', 'You have to go looking.', '', `SOUND? (Y/N) ${this.cursorOn ? '█' : ''}`];
     lines.forEach((line, i) => ctx.fillText(line, 44, 40 + i * 50));
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -437,12 +480,92 @@ export class Scene {
 
   private applyMode() {
     const inside = this.mode === 'inside';
-    this.machine.visible = !inside;
-    this.dimTarget = inside ? 0.34 : 1;
-    this.camera.position.copy(inside ? INSIDE_POS : this.attractPos());
-    this.look.copy(inside ? INSIDE_LOOK : ATTRACT_LOOK);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, inside ? 1 : 2));
+    this.machine.visible = !inside && !this.demoOn;
+    if (this.demo) this.demo.visible = this.demoOn;
+    this.dimTarget = this.demoOn ? 0 : inside ? 0.34 : 1;
+    if (this.demoOn) {
+      this.camera.position.set(0, 3.2, 9);
+      this.look.set(0, 4.6, -30);
+    } else {
+      this.camera.position.copy(inside ? INSIDE_POS : this.attractPos());
+      this.look.copy(inside ? INSIDE_LOOK : ATTRACT_LOOK);
+    }
+    // Behind the terminal the rain is a dim backdrop, and half the pixels is plenty for it.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, inside && !this.demoOn ? 1 : 2));
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight, false);
+  }
+
+  /* ─── The demo ─── */
+
+  private buildDemo() {
+    const group = new THREE.Group();
+    const color = new THREE.Color(PHOSPHOR[this.phosphor]);
+    const lines = (points: number[], material: THREE.Material) => {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+      const mesh = new THREE.LineSegments(geometry, material);
+      mesh.frustumCulled = false;
+      this.disposables.push(geometry);
+      return mesh;
+    };
+
+    const cell = 2;
+    const half = 44;
+    const near = 6;
+    const far = -84;
+    const grid: number[] = [];
+    for (let z = far; z <= near; z += cell) for (let x = -half; x < half; x += cell) grid.push(x, 0, z, x + cell, 0, z);
+    for (let x = -half; x <= half; x += cell) for (let z = far; z < near; z += cell) grid.push(x, 0, z, x, 0, z + cell);
+    this.terrain = new THREE.ShaderMaterial({
+      vertexShader: TERRAIN_VERT,
+      fragmentShader: TERRAIN_FRAG,
+      uniforms: { uTime: { value: 0 }, uCell: { value: cell }, uColor: { value: color.clone() } },
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    group.add(lines(grid, this.terrain));
+
+    // The sun: a circle that is only its horizontal chords.
+    const sun: number[] = [];
+    const radius = 13;
+    for (let i = 0; i < 20; i++) {
+      const y = -radius + (i + 0.5) * ((2 * radius) / 20);
+      const reach = Math.sqrt(radius * radius - y * y);
+      sun.push(-reach, 13 + y, -83, reach, 13 + y, -83);
+    }
+    group.add(lines(sun, this.lineMaterial));
+
+    const outerEdges = new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.3, 0));
+    const innerEdges = new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.1, 0));
+    this.solids = [new THREE.LineSegments(outerEdges, this.lineMaterial), new THREE.LineSegments(innerEdges, this.lineMaterial)];
+    for (const solid of this.solids) solid.position.set(0, 5.4, -20);
+    group.add(...this.solids);
+
+    const sky: number[] = [];
+    for (let i = 0; i < 260; i++) sky.push((Math.random() - 0.5) * 170, 7 + Math.random() * 46, -42 - Math.random() * 44);
+    const skyGeometry = new THREE.BufferGeometry();
+    skyGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sky, 3));
+    this.stars = new THREE.PointsMaterial({ color, size: 0.24, transparent: true, opacity: 0.8 });
+    group.add(new THREE.Points(skyGeometry, this.stars));
+
+    this.disposables.push(this.terrain, outerEdges, innerEdges, skyGeometry, this.stars);
+    this.demo = group;
+    this.scene.add(group);
+  }
+
+  /** Give the whole screen to the demo, or take it back. Built the first time it is asked for. */
+  setDemo(on: boolean) {
+    if (on === this.demoOn) return;
+    this.demoOn = on;
+    if (on && !this.demo) this.buildDemo();
+    this.tween = null;
+    this.applyMode();
+  }
+
+  /** Where to read the music's beat from, so the demo can move to it. */
+  setBeat(source: () => number | null) {
+    this.beat = source;
   }
 
   private run(ms: number, step: (t: number) => void): Promise<void> {
@@ -500,6 +623,8 @@ export class Scene {
     this.lineMaterial.color.copy(color);
     this.rainMaterial.uniforms.uColor.value.copy(color);
     for (const material of this.glowMaterials) material.color.copy(color);
+    this.terrain?.uniforms.uColor.value.copy(color);
+    this.stars?.color.copy(color);
     this.drawScreen();
     this.drawNameplate();
   }
@@ -558,6 +683,22 @@ export class Scene {
         this.tween = null;
         done();
       }
+    }
+
+    if (this.demoOn && this.terrain) {
+      this.demoTime += dt;
+      const t = this.demoTime;
+      this.terrain.uniforms.uTime.value = t;
+      // With the tune playing, the solids kick on the beat. Without it, they keep their own time.
+      const beat = this.beat() ?? t * 2.2;
+      const kick = 0.16 * Math.exp(-5 * (beat % 1));
+      const [outer, inner] = this.solids;
+      outer.rotation.set(t * 0.4, t * 0.6, 0);
+      outer.scale.setScalar(1 + kick);
+      inner.rotation.set(-t * 0.9, t * 0.5, t * 0.3);
+      inner.scale.setScalar(1.15 - kick);
+      outer.position.y = inner.position.y = 5.4 + Math.sin(t * 0.8) * 0.5;
+      this.camera.position.set(Math.sin(t * 0.23) * 3.2, 3.2 + Math.sin(t * 0.31) * 0.5, 9);
     }
 
     // A little parallax from the pointer, eased so it never jumps.
