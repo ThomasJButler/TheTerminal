@@ -891,8 +891,26 @@ html[data-boot='intro'] .screen {
   margin: 0;
   max-width: none;
   padding: 3rem clamp(1.25rem, 5vw, 5rem) 1.6rem;
-  /* Dark behind the words and clear to the right, so the scene still reads. */
+  /* Dark behind the words, fading out above them. */
   background: linear-gradient(to top, oklch(0.07 0.012 var(--hue) / 0.92) 55%, transparent);
+}
+/* With room beside the words, the dark stops where they do, so the scene on the right is
+   left alone. It sits on a layer of its own behind them: fading it out above the words takes
+   a mask, and a mask on the shot itself would fade the words too. */
+@media (min-width: 900px) {
+  .demo[data-running] .reel-shot {
+    position: relative;
+    isolation: isolate;
+    background: none;
+  }
+  .demo[data-running] .reel-shot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(to right, oklch(0.07 0.012 var(--hue) / 0.9) 38%, transparent 76%);
+    mask-image: linear-gradient(to top, #000 55%, transparent);
+  }
 }
 .demo[data-running] .reel-shot > * {
   max-width: 64ch;
