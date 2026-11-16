@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArcadeView } from '@/arcade/ArcadeView';
 import { MACHINE } from '@/content/site';
 import { DemoView } from '@/demo/DemoView';
+import type { Visual } from '@/demo/reel';
 import { sound } from '@/machine/sound';
 import { useMachine, type Machine } from '@/machine/useMachine';
 import { SceneLayer } from '@/scene/SceneLayer';
@@ -72,14 +73,14 @@ function Intro({ m }: { m: Machine }) {
 
 export function App() {
   const m = useMachine();
-  const [demoOn, setDemoOn] = useState(false);
+  const [visual, setVisual] = useState<Visual | null>(null);
   const { view, outside, settings, caps } = m;
 
   // The demo is the scene. If nothing has needed the scene yet, it does now.
   const { sceneWanted, wantScene } = m;
   useEffect(() => {
-    if (view === 'demo' && demoOn && caps.scene && !sceneWanted) wantScene();
-  }, [view, demoOn, caps.scene, sceneWanted, wantScene]);
+    if (view === 'demo' && visual && caps.scene && !sceneWanted) wantScene();
+  }, [view, visual, caps.scene, sceneWanted, wantScene]);
 
   return (
     <TtyContext.Provider value={m.api}>
@@ -89,7 +90,7 @@ export function App() {
           initialMode={outside === 'no' ? 'inside' : 'attract'}
           phosphor={settings.phosphor}
           rain={settings.rain}
-          demo={view === 'demo' && demoOn}
+          demo={view === 'demo' ? visual : null}
           beat={sound.beat}
           onReady={m.sceneIsReady}
           onUnavailable={m.sceneUnavailable}
@@ -102,7 +103,7 @@ export function App() {
         <StatusBar m={m} />
         {view === 'terminal' && <Terminal m={m} />}
         {view === 'arcade' && <ArcadeView m={m} />}
-        {view === 'demo' && <DemoView m={m} onRunning={setDemoOn} />}
+        {view === 'demo' && <DemoView m={m} onVisual={setVisual} />}
       </div>
 
       <div className="crt" aria-hidden="true" />
