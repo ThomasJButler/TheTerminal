@@ -304,7 +304,7 @@ function synth(c: BaseAudioContext, to: AudioNode[], t: number, v: Voice) {
 
 function kick(c: BaseAudioContext, bus: Bus, t: number) {
   tone(c, bus.drums, t, { freq: 150, to: 44, dur: 0.24, type: 'sine', gain: 0.7 });
-  noise(c, bus.drums, t, { dur: 0.012, gain: 0.22, freq: 3200, type: 'highpass' });
+  noise(c, bus.drums, t, { dur: 0.014, gain: 0.32, freq: 3200, type: 'highpass' });
   // The pump: everything else drops as the kick lands and swells back before the next.
   bus.duck.gain.setValueAtTime(0.34, t);
   bus.duck.gain.linearRampToValueAtTime(1, t + STEP * 3);
@@ -313,6 +313,8 @@ function kick(c: BaseAudioContext, bus: Bus, t: number) {
 function snare(c: BaseAudioContext, bus: Bus, t: number, level = 1) {
   noise(c, bus.drums, t, { dur: 0.19, gain: 0.4 * level, freq: 1900, q: 0.6 });
   noise(c, bus.space, t, { dur: 0.12, gain: 0.3 * level, freq: 2600, q: 0.6 });
+  // The crack on top. Without it the snare is all body and sits under everything else.
+  noise(c, bus.drums, t, { dur: 0.1, gain: 0.2 * level, freq: 5200, type: 'highpass' });
   tone(c, bus.drums, t, { freq: 200, to: 150, dur: 0.09, type: 'triangle', gain: 0.24 * level });
 }
 
@@ -349,21 +351,21 @@ function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number)
   if (at === 0) {
     synth(c, [bus.duck, bus.space], t, {
       freqs: chord.map(hz), type: 'sawtooth', spread: 11, dur: STEP * 16, gain: 0.026,
-      attack: 0.5, release: 0.7, cutoff: 480, cutoffTo: 1150,
+      attack: 0.5, release: 0.7, cutoff: 650, cutoffTo: 1800,
     });
   }
 
   // The arpeggio starts muffled and opens over the intro.
   const open = cycle === 0 ? 0.25 + 0.75 * (step / 64) : 1;
   synth(c, [bus.duck, bus.echo], t, {
-    freqs: [hz(chord[ARP[at]] + 12)], type: 'square', dur: STEP * 0.5, gain: 0.05,
-    release: 0.12, cutoff: 3400 * open, cutoffTo: 520, q: 3,
+    freqs: [hz(chord[ARP[at]] + 12)], type: 'square', dur: STEP * 0.5, gain: 0.06,
+    release: 0.12, cutoff: 4600 * open, cutoffTo: 950, q: 3,
   });
 
   if (part.bass) {
     synth(c, [bus.duck], t, {
-      freqs: [hz(chord[0] - 12 + BASS[at])], type: 'sawtooth', spread: 9, dur: STEP * 0.8, gain: 0.2,
-      release: 0.05, cutoff: 1500, cutoffTo: 210, q: 7,
+      freqs: [hz(chord[0] - 12 + BASS[at])], type: 'sawtooth', spread: 9, dur: STEP * 0.8, gain: 0.15,
+      release: 0.05, cutoff: 1900, cutoffTo: 320, q: 7,
     });
   }
 
@@ -371,7 +373,7 @@ function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number)
   if (part.snare && at % 8 === 4) snare(c, bus, t);
   // Hats: every step, quietly, with the off-beats leaning forward and one left open.
   const openHat = part.kick && at === 14 && bar % 2 === 1;
-  noise(c, bus.drums, t, { dur: openHat ? 0.16 : 0.03, gain: at % 4 === 2 ? 0.1 : 0.045, freq: 9000, type: 'highpass' });
+  noise(c, bus.drums, t, { dur: openHat ? 0.16 : 0.03, gain: at % 4 === 2 ? 0.19 : 0.085, freq: 8000, type: 'highpass' });
 
   if (part.lead) {
     const note = melody[step % 64];
@@ -380,8 +382,8 @@ function musicStep(c: BaseAudioContext, out: AudioNode, t: number, step: number)
       let hold = 1;
       while (hold < 16 && !melody[(step + hold) % 64]) hold += 1;
       synth(c, [bus.duck, bus.echo, bus.space], t, {
-        freqs: [hz(note)], type: 'sawtooth', spread: 14, dur: STEP * hold * 0.92, gain: 0.07,
-        attack: 0.03, release: 0.25, cutoff: 700, cutoffTo: 2800, sweep: 0.16, q: 2, vibrato: 7,
+        freqs: [hz(note)], type: 'sawtooth', spread: 14, dur: STEP * hold * 0.92, gain: 0.085,
+        attack: 0.03, release: 0.25, cutoff: 900, cutoffTo: 3800, sweep: 0.16, q: 2, vibrato: 7,
       });
     }
   }
